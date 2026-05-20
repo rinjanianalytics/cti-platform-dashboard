@@ -7,9 +7,11 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-heading: var(--font-display);
+  --color-brand: var(--brand);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -55,7 +57,9 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  /* Brand accent — Rinjani teal (#006b5e light / #009685 dark), ported from v303. */
+  --brand: oklch(0.458 0.088 184);
+  --primary: oklch(0.458 0.088 184);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
@@ -66,7 +70,7 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --ring: oklch(0.458 0.088 184);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -75,46 +79,51 @@
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary: oklch(0.458 0.088 184);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.97 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-ring: oklch(0.458 0.088 184);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
+  /* Warm-shifted greys: chroma 0.005, hue 60 (warm yellow-ish) so the
+     dark surface reads slightly closer to a paper / analyst-console feel
+     rather than the pure-cold grey of `oklch(L 0 0)`. */
+  --background: oklch(0.145 0.005 60);
   --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
+  --card: oklch(0.21 0.005 60);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
+  --popover: oklch(0.21 0.005 60);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
+  /* Brand teal — #009685, ported from v303 (the dark-mode brand variant). */
+  --brand: oklch(0.621 0.123 184);
+  --primary: oklch(0.621 0.123 184);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.27 0.005 60);
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
+  --muted: oklch(0.27 0.005 60);
+  --muted-foreground: oklch(0.71 0.005 60);
+  --accent: oklch(0.27 0.005 60);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: oklch(0.621 0.123 184);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
+  --sidebar: oklch(0.21 0.005 60);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary: oklch(0.621 0.123 184);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent: oklch(0.27 0.005 60);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: oklch(0.621 0.123 184);
 }
 
 @layer base {
@@ -126,5 +135,49 @@
   }
   html {
     @apply font-sans;
+  }
+  /* Page titles + section headings use the display face (IBM Plex Sans).
+     Body, panel labels, and inline text keep Geist for readability. */
+  h1, h2 {
+    font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+    letter-spacing: -0.015em;
+  }
+}
+
+/* -----------------------------------------------------------------------------
+   Motion principles — SaaS dashboard context (Emil primary, Jakub secondary).
+   - Frequency gate: dropdowns, filters, row clicks, paging = high-freq → no extra motion.
+   - Data arrival (KPI cards, similar panel, table body) = occasional → subtle Jakub enter.
+   - Hover state shifts = 150ms transition for polish (Jakub).
+   - Accessibility: prefers-reduced-motion zeroes durations across the board.
+   -------------------------------------------------------------------------- */
+
+/* Jakub enter: opacity + translateY + blur. Fast (220ms) ease-out. */
+@keyframes motion-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.motion-enter {
+  animation: motion-enter 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Mandatory: respect users who opted out of motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

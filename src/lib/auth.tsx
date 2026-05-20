@@ -23,6 +23,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
 
     useEffect(() => {
+        // 1. If the URL carries `?token=…` (OAuth callback redirect from the
+        //    API), consume it before anything else: stash to localStorage and
+        //    strip the query param so a refresh doesn't replay the token.
+        if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            const fromUrl = url.searchParams.get('token');
+            if (fromUrl) {
+                setToken(fromUrl);
+                url.searchParams.delete('token');
+                url.searchParams.delete('error');
+                window.history.replaceState({}, '', url.toString());
+            }
+        }
+
         const token = getToken();
         if (!token) {
             setIsLoading(false);
