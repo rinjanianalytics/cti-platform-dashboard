@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
     LayoutDashboard, Radar, Shield, Users, Database, Workflow,
-    Bell, LogOut, ChevronLeft, ChevronRight,
+    Bell, LogOut, ChevronLeft, ChevronRight, ServerCog, UsersRound, UserCircle2,
 } from 'lucide-react';
 import { SearchPalette } from '@/components/search-palette';
 import { HeaderSearch } from '@/components/header-search';
@@ -31,6 +31,12 @@ const NAV = [
     { href: '/actors', label: 'Threat actors', icon: Users },
     { href: '/feeds', label: 'Feeds', icon: Database },
     { href: '/playbooks', label: 'Playbooks', icon: Workflow },
+];
+
+// Admin-only entries — rendered as a separate group below the main NAV.
+const ADMIN_NAV = [
+    { href: '/admin/services', label: 'Services', icon: ServerCog },
+    { href: '/admin/users',    label: 'Users',    icon: UsersRound },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -81,6 +87,30 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                             </SidebarMenu>
                         </SidebarGroupContent>
                     </SidebarGroup>
+
+                    {user.role === 'admin' && (
+                        <SidebarGroup>
+                            <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground/70 group-data-[collapsible=icon]:hidden">
+                                Admin
+                            </div>
+                            <SidebarGroupContent>
+                                <SidebarMenu>
+                                    {ADMIN_NAV.map((item) => (
+                                        <SidebarMenuItem key={item.href}>
+                                            <SidebarMenuButton
+                                                isActive={isActive(item.href)}
+                                                tooltip={item.label}
+                                                render={<Link href={item.href} />}
+                                            >
+                                                <item.icon />
+                                                <span>{item.label}</span>
+                                            </SidebarMenuButton>
+                                        </SidebarMenuItem>
+                                    ))}
+                                </SidebarMenu>
+                            </SidebarGroupContent>
+                        </SidebarGroup>
+                    )}
                 </SidebarContent>
                 <SidebarFooter>
                     <div className="text-[10px] text-muted-foreground px-2 group-data-[collapsible=icon]:hidden">
@@ -134,6 +164,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                     <span className="text-foreground font-medium">{user.name}</span>
                                 </DropdownMenuLabel>
                             </DropdownMenuGroup>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem render={<Link href="/settings/profile" />}>
+                                <UserCircle2 className="size-3.5" /> Profile
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={logout}>
                                 <LogOut className="size-3.5" /> Sign out
