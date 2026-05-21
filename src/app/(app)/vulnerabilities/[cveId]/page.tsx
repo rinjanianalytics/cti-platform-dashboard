@@ -1,13 +1,16 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { vulns } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, ShieldAlert, ExternalLink } from 'lucide-react';
+import { ArrowLeft, ShieldAlert, ExternalLink, Sparkles } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn, SEVERITY_TONE, relTime } from '@/lib/utils';
 import { SimilarPanel } from '@/components/similar-panel';
 
@@ -22,7 +25,34 @@ function cvssTone(score: number | null | undefined): string {
 export default function VulnerabilityDetailPage({ params }: { params: Promise<{ cveId: string }> }) {
     const { cveId } = use(params);
     const decoded = decodeURIComponent(cveId);
-    const { data, isLoading } = useSWR(['vuln', decoded], () => vulns.get(decoded));
+    const { data, isLoading, mutate } = useSWR(['vuln', decoded], () => vulns.get(decoded));
+    const { user } = useAuth();
+    const canEnrich = user?.role === 'admin' || user?.role === 'analyst';
+    const [enriching, setEnriching] = useState(false);
+
+    const onEnrich = async () => {
+        if (!data?.cveId) return;
+        setEnriching(true);
+        try {
+            const r = await vulns.enrich(data.cveId);
+            if (!r.applied) {
+                toast.info('Nothing applied', {
+                    description: r.reason === 'already-scored'
+                        ? 'This CVE already has a CVSS score.'
+                        : 'NVD has no CVSS data for this CVE.',
+                });
+            } else {
+                toast.success(`CVSS ${r.score?.toFixed(1)} (${r.severity})`, {
+                    description: `From NVD ${r.version}`,
+                });
+                await mutate();
+            }
+        } catch (err) {
+            toast.error('Enrichment failed', { description: (err as Error).message });
+        } finally {
+            setEnriching(false);
+        }
+    };
 
     if (isLoading) {
         return (
@@ -74,16 +104,24 @@ export default function VulnerabilityDetailPage({ params }: { params: Promise<{ 
                             </p>
                         )}
                     </div>
-                    {nvdLink && (
-                        <a
-                            href={nvdLink}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground shrink-0"
-                        >
-                            NVD <ExternalLink className="size-3" />
-                        </a>
-                    )}
+                    <div className="flex items-center gap-3 shrink-0">
+                        {canEnrich && vuln.cvssScore == null && (
+                            <Button size="sm" variant="outline" onClick={onEnrich} disabled={enriching}>
+                                <Sparkles className="size-3.5" />
+                                {enriching ? 'Fetching…' : 'Fetch CVSS from NVD'}
+                            </Button>
+                        )}
+                        {nvdLink && (
+                            <a
+                                href={nvdLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                            >
+                                NVD <ExternalLink className="size-3" />
+                            </a>
+                        )}
+                    </div>
                 </div>
             </div>
 

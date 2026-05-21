@@ -12,6 +12,7 @@ interface AuthCtx {
     isAuthenticated: boolean;
     login: (apiKey: string) => Promise<void>;
     logout: () => Promise<void>;
+    refreshUser: () => Promise<void>;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -70,8 +71,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         router.replace('/login');
     }, [router]);
 
+    const refreshUser = useCallback(async () => {
+        if (!getToken()) return;
+        try {
+            const me = await auth.me();
+            setUser(me);
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 401) {
+                setToken(null);
+                setUser(null);
+            }
+        }
+    }, []);
+
     return (
-        <Ctx.Provider value={{ user, isLoading, isAuthenticated: !!user, login, logout }}>
+        <Ctx.Provider value={{ user, isLoading, isAuthenticated: !!user, login, logout, refreshUser }}>
             {children}
         </Ctx.Provider>
     );
