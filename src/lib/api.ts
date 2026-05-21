@@ -130,6 +130,13 @@ export const auth = {
     oauthStartUrl(provider: 'google' | 'github'): string {
         return `${API_URL}/auth/oauth/${provider}`;
     },
+    /**
+     * Update the current user's avatar. `avatarUrl` is a base64 data URI
+     * (≤500KB after encoding) or null to clear.
+     */
+    async updateAvatar(id: string, avatarUrl: string | null): Promise<AdminUser> {
+        return request(`/admin/users/${id}/avatar`, { method: 'POST', body: { avatarUrl } });
+    },
 };
 
 // =============================================================================
@@ -212,6 +219,117 @@ export interface Stats {
     vulnerabilities: number;
     threatActors: number;
     pulses: number;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Admin                                                                  */
+/* ---------------------------------------------------------------------- */
+
+export interface AdminServicesReport {
+    process: {
+        bootlockOwner: string | null;
+        bootlockHeldByThisProcess: boolean;
+        workerActive: boolean;
+        totalConnectedWorkers: number;
+        workersByQueue: Array<{ queue: string; workerCount: number }>;
+    };
+    datastores: {
+        postgres: { connected: boolean; latencyMs?: number; error?: string };
+        opensearch: { connected: boolean; latencyMs?: number; status?: string; error?: string };
+        redis: { queue: { connected: boolean; latency?: number }; cache: { connected: boolean; latency?: number } };
+        neo4j: { connected: boolean; latencyMs?: number; error?: string };
+    };
+    llm: {
+        gemini: { configured: boolean };
+        openrouter: { configured: boolean };
+        ollama: { available: boolean };
+    };
+    optionalServices: Record<string, { available: boolean; configured: boolean }>;
+    queues: Array<{ name: string; waiting: number; active: number; completed: number; failed: number; delayed: number }>;
+    feeds: Array<{
+        feed: string;
+        /** Registry key the manual-sync endpoint accepts; null = no known handler. */
+        registryKey: string | null;
+        lastSync: string | null;
+        status: string;
+        itemsProcessed: number;
+        itemsFailed: number;
+        errorMessage: string | null;
+    }>;
+    timestamp: string;
+}
+
+export const admin = {
+    async services(): Promise<AdminServicesReport> {
+        return request('/admin/services');
+    },
+    /** Queue an immediate sync for a given feed. Returns the BullMQ job id. */
+    async syncFeed(source: string): Promise<{ jobId: string; queue: string; source: string; status: string }> {
+        return request('/admin/jobs/feed-sync', { method: 'POST', body: { source } });
+    },
+    /* User management ---------------------------------------------------- */
+    async listUsers(opts: {
+        page?: number; limit?: number; search?: string;
+        role?: string; status?: 'active' | 'inactive' | 'all';
+    } = {}): Promise<{
+        users: AdminUser[];
+        pagination: { page: number; pageSize: number; total: number; pages: number };
+    }> {
+        const qs = new URLSearchParams();
+        if (opts.page) qs.set('page', String(opts.page));
+        if (opts.limit) qs.set('limit', String(opts.limit));
+        if (opts.search) qs.set('search', opts.search);
+        if (opts.role) qs.set('role', opts.role);
+        if (opts.status && opts.status !== 'all') qs.set('status', opts.status);
+        const query = qs.toString();
+        return request(`/admin/users${query ? `?${query}` : ''}`);
+    },
+    async listRoles(): Promise<{ roles: AdminRole[]; permissionModules: Array<{ id: string; name: string }> }> {
+        return request('/admin/users/roles/list');
+    },
+    async updateUser(id: string, body: {
+        name?: string; email?: string; role?: string; permissions?: string[];
+    }): Promise<AdminUser> {
+        return request(`/admin/users/${id}`, { method: 'PUT', body });
+    },
+    async activateUser(id: string): Promise<AdminUser> {
+        return request(`/admin/users/${id}/activate`, { method: 'POST' });
+    },
+    async deactivateUser(id: string): Promise<AdminUser> {
+        return request(`/admin/users/${id}/deactivate`, { method: 'POST' });
+    },
+    async deleteUser(id: string): Promise<{ message: string }> {
+        return request(`/admin/users/${id}`, { method: 'DELETE' });
+    },
+    /**
+     * Hard-delete: removes the user row. Irreversible.
+     * Cascades org memberships, sessions, API keys, OAuth identities.
+     * Severs created_by on playbooks/sightings (rows preserved).
+     */
+    async purgeUser(id: string): Promise<{ message: string }> {
+        return request(`/admin/users/${id}/purge`, { method: 'DELETE' });
+    },
+};
+
+export interface AdminUser {
+    id: string;
+    email: string;
+    name: string;
+    avatarUrl: string | null;
+    roles: string[];
+    permissions: string[];
+    isActive: boolean;
+    lastLogin: string | null;
+    apiToken: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface AdminRole {
+    id: string;
+    name: string;
+    description?: string;
+    permissions?: string[];
 }
 
 export const platform = {
@@ -356,6 +474,25 @@ export const vulns = {
             `/v1/vulnerabilities/${encodeURIComponent(cveId)}`,
         );
         return normaliseVuln(res);
+    },
+    /** Fetch CVSS from NVD for a single CVE; skipped if already scored. */
+    async enrich(cveId: string): Promise<{
+        cveId: string;
+        applied: boolean;
+        reason?: 'already-scored' | 'no-nvd-data';
+        score?: number;
+        vector?: string;
+        severity?: string;
+        version?: 'v3.1' | 'v3.0' | 'v2';
+    }> {
+        return request(`/v1/vulnerabilities/${encodeURIComponent(cveId)}/enrich`, { method: 'POST' });
+    },
+    /** Bulk back-fill CVSS for every vulnerability with NULL cvssScore. Admin only. */
+    async enrichBulk(opts: { limit?: number } = {}): Promise<{
+        considered: number; enriched: number; notFound: number;
+        errors: Array<{ cveId: string; error: string }>;
+    }> {
+        return request('/v1/vulnerabilities/enrich/bulk', { method: 'POST', body: { limit: opts.limit } });
     },
 };
 
