@@ -28,7 +28,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState } from '@/components/ui/empty-state';
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -53,6 +52,10 @@ interface ModeDef {
     inputLabel: string;
     placeholder: string;
     description: string;
+    /** Real values from the current DB — used as one-click examples in the
+     *  empty state. Better than the generic "1.2.3.4" placeholder, which
+     *  leads users to try unknown IPs and get a "0 nodes" result. */
+    examples: string[];
     fetcher: (value: string) => Promise<GraphResult>;
 }
 
@@ -63,6 +66,7 @@ const MODES: ModeDef[] = [
         inputLabel: 'IOC value',
         placeholder: '1.2.3.4   /   evil.example.com   /   <sha256>',
         description: 'Start from an IOC, traverse to pulses, actors, and other IOCs in the same neighborhood.',
+        examples: ['serialmenot.com', '37.32.15.8', 'hngfbgfbfb.cyou'],
         fetcher: (v) => graphApi.iocPivot(v, 50),
     },
     {
@@ -71,6 +75,7 @@ const MODES: ModeDef[] = [
         inputLabel: 'Actor name',
         placeholder: 'APT29 / Lazarus / FIN7',
         description: 'For a named actor, show every MITRE technique and tactic they\'re associated with.',
+        examples: ['APT29', 'Lazarus Group', 'FIN7'],
         fetcher: (v) => graphApi.attackTree(v),
     },
     {
@@ -79,6 +84,7 @@ const MODES: ModeDef[] = [
         inputLabel: 'Entity id',
         placeholder: 'Neo4j node id (UUID or canonical key)',
         description: 'For any node id, expand its 1-hop neighborhood. Use this after clicking a node in another mode.',
+        examples: [],
         fetcher: (v) => graphApi.expand(v, 1, 50),
     },
     {
@@ -87,6 +93,7 @@ const MODES: ModeDef[] = [
         inputLabel: 'Actor name',
         placeholder: 'APT29 / Lazarus / FIN7',
         description: 'Other actors that share at least one MITRE technique with the named actor.',
+        examples: ['APT29', 'Lazarus Group', 'FIN7'],
         fetcher: (v) => graphApi.relatedActors(v, 1),
     },
 ];
@@ -237,14 +244,19 @@ export default function GraphExplorerPage() {
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
                 <Card>
                     <CardHeader className="pb-3">
-                        <CardTitle className="text-base flex items-center gap-2">
+                        <CardTitle className="text-base flex items-center gap-2 flex-wrap">
                             <Network className="size-4 text-muted-foreground" />
-                            {submittedValue ? `${activeMode.label} · ${submittedValue}` : 'Graph'}
+                            <span>{submittedValue ? `${activeMode.label} · ${submittedValue}` : 'Graph'}</span>
                             {data && (
                                 <Badge variant="outline" className="text-[10px] font-mono">
                                     {data.nodes.length} nodes · {data.edges.length} edges
                                 </Badge>
                             )}
+                            {error ? (
+                                <Badge variant="outline" className="text-[10px] font-mono text-red-400 border-red-400/50">
+                                    error
+                                </Badge>
+                            ) : null}
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="px-0 pb-0">
@@ -255,6 +267,12 @@ export default function GraphExplorerPage() {
                             empty={!submittedValue}
                             onNodeClick={onNodeClick}
                             selectedId={selectedNode?.id}
+                            examples={activeMode.examples}
+                            onPickExample={(v) => {
+                                setInputValue(v);
+                                setSubmittedValue(v);
+                                setSelectedNode(null);
+                            }}
                         />
                     </CardContent>
                 </Card>
@@ -286,7 +304,7 @@ export default function GraphExplorerPage() {
 /* -------------------------------------------------------------------------- */
 
 function GraphCanvas({
-    data, loading, error, empty, onNodeClick, selectedId,
+    data, loading, error, empty, onNodeClick, selectedId, examples, onPickExample,
 }: {
     data?: GraphResult;
     loading: boolean;
@@ -294,6 +312,8 @@ function GraphCanvas({
     empty: boolean;
     onNodeClick: (n: object) => void;
     selectedId?: string;
+    examples: string[];
+    onPickExample: (v: string) => void;
 }) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [size, setSize] = useState({ w: 800, h: 600 });
@@ -317,37 +337,57 @@ function GraphCanvas({
         };
     }, [data]);
 
+    const hasGraph = !empty && !loading && !error && data && data.nodes.length > 0;
+
+    // Shrink the canvas when there's nothing to show, so the empty/error
+    // state isn't lost in a 600px black box (previous bug: users couldn't
+    // see "Empty result" because it was vertically centered below the fold).
+    const heightClass = hasGraph ? 'h-[600px]' : 'h-[220px]';
+
     return (
-        <div ref={containerRef} className="w-full h-[600px] relative bg-muted/10">
+        <div ref={containerRef} className={cn('w-full relative bg-muted/10', heightClass)}>
             {empty && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <EmptyState
-                        icon={Network}
-                        title="No graph yet"
-                        description="Enter a value above and click Explore. Click any node on the result to traverse from there."
-                    />
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6 gap-3">
+                    <Network className="size-6 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">
+                        Enter a value above and click <span className="font-medium text-foreground">Explore</span>. Click any node on the result to traverse from there.
+                    </p>
+                    {examples.length > 0 && (
+                        <ExampleChips examples={examples} onPick={onPickExample} />
+                    )}
                 </div>
             )}
             {!empty && loading && (
                 <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
-                    Loading graph…
+                    <span className="inline-flex items-center gap-2">
+                        <RefreshCw className="size-3.5 animate-spin" /> Loading graph…
+                    </span>
                 </div>
             )}
             {!empty && error && (
-                <div className="absolute inset-0 flex items-center justify-center text-sm text-red-400 font-mono px-6 text-center">
-                    {error.message}
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center">
+                    <p className="text-sm text-red-400 font-mono">{error.message}</p>
+                    <p className="text-xs text-muted-foreground">Check the API logs, or try a known value.</p>
+                    {examples.length > 0 && (
+                        <ExampleChips examples={examples} onPick={onPickExample} />
+                    )}
                 </div>
             )}
             {!empty && !loading && !error && data && data.nodes.length === 0 && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <EmptyState
-                        icon={Network}
-                        title="Empty result"
-                        description="No nodes found for that input. Try a different value, or switch modes."
-                    />
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center">
+                    <p className="text-sm">
+                        <span className="font-medium">0 nodes</span>
+                        <span className="text-muted-foreground"> — this value isn&apos;t in the graph.</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                        Try a value that&apos;s actually been ingested.
+                    </p>
+                    {examples.length > 0 && (
+                        <ExampleChips examples={examples} onPick={onPickExample} />
+                    )}
                 </div>
             )}
-            {!empty && !loading && !error && data && data.nodes.length > 0 && (
+            {hasGraph && (
                 <ForceGraph2D
                     graphData={graphData}
                     width={size.w}
@@ -379,6 +419,26 @@ function GraphCanvas({
                     cooldownTicks={100}
                 />
             )}
+        </div>
+    );
+}
+
+/** One-click example chips for empty/error states. Pulls real values from
+ *  the current DB so users hit data on first try instead of guessing IPs. */
+function ExampleChips({ examples, onPick }: { examples: string[]; onPick: (v: string) => void }) {
+    return (
+        <div className="flex items-center gap-2 flex-wrap justify-center mt-1">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">try</span>
+            {examples.map(v => (
+                <button
+                    key={v}
+                    type="button"
+                    onClick={() => onPick(v)}
+                    className="font-mono text-[11px] px-2 py-0.5 rounded border bg-muted/40 hover:bg-muted/70 hover:border-primary/50 transition-colors"
+                >
+                    {v}
+                </button>
+            ))}
         </div>
     );
 }
