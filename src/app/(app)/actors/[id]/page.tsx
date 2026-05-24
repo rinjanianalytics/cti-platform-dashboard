@@ -85,7 +85,7 @@ export default function ActorDetailPage({ params }: { params: Promise<{ id: stri
                 <div className="mt-2 flex items-start justify-between gap-4 flex-wrap">
                     <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                            <h1 className="text-2xl font-semibold tracking-tight">{actor.name}</h1>
+                            <h1 className="text-3xl font-semibold tracking-tight">{actor.name}</h1>
                             {actor.sophistication && (
                                 <Badge variant="outline" className={`font-mono text-[10px] uppercase ${SOPH_TONE[actor.sophistication] ?? ''}`}>
                                     {actor.sophistication}

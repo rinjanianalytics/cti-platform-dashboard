@@ -43,7 +43,7 @@ export default function AdminServicesPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
-                    <h1 className="text-2xl font-semibold tracking-tight">Services</h1>
+                    <h1 className="text-3xl font-semibold tracking-tight">Services</h1>
                     <p className="text-sm text-muted-foreground mt-1">
                         Datastores, workers, queues, and feeds at a glance. Auto-refreshes every {Math.round(REFRESH_MS / 1000)}s.
                     </p>
@@ -149,6 +149,32 @@ export default function AdminServicesPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* ── Enrichment sources (CVE data providers) ──────────────────── */}
+            <Card>
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                        <Sparkles className="size-4 text-muted-foreground" /> Enrichment sources
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {!data ? <SkeletonStrip n={2} /> : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                            {Object.entries(data.enrichmentSources).map(([name, s]) => (
+                                <StatusTile
+                                    key={name}
+                                    label={enrichmentLabel(name)}
+                                    ok={s.available}
+                                    detail={enrichmentDetail(name, s)}
+                                />
+                            ))}
+                        </div>
+                    )}
+                    <p className="text-[11px] text-muted-foreground/70 italic mt-3">
+                        OSV (primary) covers most OSS CVEs with no auth or rate limit. NVD (fallback) covers everything else; rate-limited without a key.
+                    </p>
+                </CardContent>
+            </Card>
 
             {/* ── Queues ────────────────────────────────────────────────────── */}
             <Card>
@@ -314,4 +340,29 @@ function fmtLat(ms?: number, err?: string, status?: string): string {
 }
 function fmtLatN(ms?: number): string {
     return ms != null ? `${ms}ms` : '—';
+}
+
+/** Pretty-label for an enrichment source key. */
+function enrichmentLabel(key: string): string {
+    switch (key) {
+        case 'osv': return 'OSV — Open Source Vulnerabilities';
+        case 'nvd': return 'NVD — NIST CVE database';
+        default:    return key;
+    }
+}
+
+/** Compose the detail line for an enrichment-source status tile. */
+function enrichmentDetail(
+    key: string,
+    s: { available: boolean; configured: boolean; latencyMs?: number; note?: string; error?: string },
+): string {
+    if (s.error) return `Error: ${s.error}`;
+    if (key === 'osv') {
+        // OSV is always probed live — surface real latency.
+        return s.available
+            ? `Reachable · ${fmtLatN(s.latencyMs)}${s.note ? ` · ${s.note}` : ''}`
+            : 'Unreachable';
+    }
+    // NVD: configured = has API key. Available = always true (works keyless, just slow).
+    return s.note ?? (s.configured ? 'API key set' : 'No API key');
 }

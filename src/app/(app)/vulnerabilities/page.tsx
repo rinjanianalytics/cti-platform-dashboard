@@ -15,7 +15,7 @@ import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { DateRangePicker, type DateRange } from '@/components/ui/date-range';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Search, X, ShieldAlert, Shield } from 'lucide-react';
-import { cn, SEVERITY_TONE, relTime } from '@/lib/utils';
+import { cn, severityTone, cvssTone, relTime } from '@/lib/utils';
 
 function toIso(d: Date | undefined): string | undefined {
     if (!d) return undefined;
@@ -37,14 +37,6 @@ const SEVERITY_FILTERS = [
 ];
 
 const PAGE_SIZE = 25;
-
-function cvssTone(score: number | null): string {
-    if (score == null) return 'text-muted-foreground';
-    if (score >= 9) return 'text-red-400';
-    if (score >= 7) return 'text-amber-400';
-    if (score >= 4) return 'text-blue-400';
-    return 'text-emerald-400';
-}
 
 export default function VulnerabilitiesPage() {
     const router = useRouter();
@@ -129,7 +121,7 @@ export default function VulnerabilitiesPage() {
             accessor: r => r.severity,
             sortable: true,
             cell: r => r.severity
-                ? <Badge variant="outline" className={cn('font-mono text-[10px] uppercase', SEVERITY_TONE[r.severity.toLowerCase()] ?? '')}>{r.severity}</Badge>
+                ? <Badge variant="outline" className={cn('font-mono text-[10px] uppercase', severityTone(r.severity))}>{r.severity}</Badge>
                 : <span className="text-xs text-muted-foreground">—</span>,
         },
         {
@@ -167,7 +159,7 @@ export default function VulnerabilitiesPage() {
         <div className="space-y-6">
             <div className="flex items-end justify-between gap-4 flex-wrap">
                 <div>
-                    <h1 className="text-2xl font-semibold tracking-tight">Vulnerabilities</h1>
+                    <h1 className="text-3xl font-semibold tracking-tight">Vulnerabilities</h1>
                     <p className="text-sm text-muted-foreground mt-1 tabular-nums">
                         {isLoading ? 'Loading…' : `${total.toLocaleString()} CVEs from CISA KEV + ingested feeds`}
                     </p>
