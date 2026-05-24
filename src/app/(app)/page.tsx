@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Flame, AlertCircle, CheckCircle2, MinusCircle } from 'lucide-react';
-import { cn, SEVERITY_TONE, relTime } from '@/lib/utils';
+import { cn, severityTone, relTime } from '@/lib/utils';
 
 const fmt = (n: number | null | undefined) =>
     n == null ? '—' : n.toLocaleString('en-US');
@@ -47,8 +47,8 @@ export default function OverviewPage() {
             {/* ── Header ─────────────────────────────────────────────────────── */}
             <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
-                    <h1 className="text-xl font-semibold tracking-tight">Threat overview</h1>
-                    <p className="text-xs text-muted-foreground mt-0.5">
+                    <h1 className="text-3xl font-semibold tracking-tight">Threat overview</h1>
+                    <p className="text-sm text-muted-foreground mt-1">
                         Live snapshot · {landscape?.period ?? '7d'} window
                     </p>
                 </div>
@@ -107,7 +107,7 @@ export default function OverviewPage() {
                                         count={s.count}
                                         max={sevTotal}
                                         href={`/iocs?severity=${encodeURIComponent(s.severity ?? '')}`}
-                                        tone={s.severity ? SEVERITY_TONE[s.severity] ?? '' : ''}
+                                        tone={severityTone(s.severity)}
                                     />
                                 ))}
                         </div>
@@ -123,10 +123,12 @@ export default function OverviewPage() {
                     ) : (
                         <div className="space-y-1.5 motion-enter">
                             {tactics.slice(0, 8).map(t => (
-                                <div key={t.mitreId} className="grid grid-cols-[44px_1fr_44px_22px] gap-2 items-center text-[12px]">
+                                <div key={t.mitreId} className="grid grid-cols-[42px_1fr_28px] sm:grid-cols-[44px_1fr_60px_28px] gap-2 items-center text-[12px]">
                                     <span className="font-mono text-[10px] text-muted-foreground">{t.mitreId}</span>
                                     <span className="truncate">{t.name}</span>
-                                    <div className="h-1 rounded-full bg-muted overflow-hidden">
+                                    {/* Desktop-only inline bar; mobile drops it to keep the
+                                        name readable in the tight column. */}
+                                    <div className="hidden sm:block h-1 rounded-full bg-muted overflow-hidden">
                                         <div className="h-full bg-foreground/70" style={{ width: `${(t.techniqueCount / maxTacticCount) * 100}%` }} />
                                     </div>
                                     <span className="text-[10px] text-muted-foreground tabular-nums text-right">{t.techniqueCount}</span>
@@ -272,7 +274,7 @@ function BarRow({
 }: { label: string; count: number; max: number; href?: string; tone?: string; barTone?: string }) {
     const pct = max > 0 ? (count / max) * 100 : 0;
     const body = (
-        <div className="grid grid-cols-[110px_1fr_56px] gap-3 items-center text-[12px]">
+        <div className="grid grid-cols-[80px_1fr_44px] sm:grid-cols-[110px_1fr_56px] gap-2 sm:gap-3 items-center text-[12px]">
             <span className={cn('font-mono text-[11px] truncate uppercase tracking-wide', tone)}>{label}</span>
             <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                 <div

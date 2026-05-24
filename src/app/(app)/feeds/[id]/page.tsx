@@ -62,7 +62,7 @@ export default function FeedDetailPage({ params }: { params: Promise<{ id: strin
                 </Link>
                 <div className="mt-2">
                     <div className="flex items-center gap-2 flex-wrap">
-                        <h1 className="text-2xl font-semibold tracking-tight">{pulse.name}</h1>
+                        <h1 className="text-3xl font-semibold tracking-tight">{pulse.name}</h1>
                         {tlp && (
                             <Badge variant="outline" className={`font-mono text-[10px] uppercase ${TLP_TONE[tlp] ?? ''}`}>
                                 {tlp}

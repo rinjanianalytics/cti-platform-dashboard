@@ -20,7 +20,7 @@ import { Combobox } from '@/components/ui/combobox';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Plus, Search, X, Radar } from 'lucide-react';
 import { toast } from 'sonner';
-import { cn, SEVERITY_TONE, relTime } from '@/lib/utils';
+import { cn, severityTone, relTime } from '@/lib/utils';
 
 // Values must match the canonical IOC type buckets the API filters on.
 // (All hash algorithms live under `hash`; differentiation is in the value
@@ -126,7 +126,7 @@ export default function IOCsPage() {
             accessor: r => r.severity,
             sortable: true,
             cell: r => r.severity
-                ? <Badge variant="outline" className={cn('font-mono text-[10px] uppercase', SEVERITY_TONE[r.severity] ?? '')}>{r.severity}</Badge>
+                ? <Badge variant="outline" className={cn('font-mono text-[10px] uppercase', severityTone(r.severity))}>{r.severity}</Badge>
                 : <span className="text-xs text-muted-foreground">—</span>,
         },
         {
@@ -173,7 +173,7 @@ export default function IOCsPage() {
         <div className="space-y-6">
             <div className="flex items-end justify-between gap-4 flex-wrap">
                 <div>
-                    <h1 className="text-2xl font-semibold tracking-tight">Indicators</h1>
+                    <h1 className="text-3xl font-semibold tracking-tight">Indicators</h1>
                     <p className="text-sm text-muted-foreground mt-1 tabular-nums">
                         {isLoading ? 'Loading…' : `${total.toLocaleString()} indicators across all sources`}
                     </p>

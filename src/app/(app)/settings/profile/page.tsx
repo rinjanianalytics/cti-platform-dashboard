@@ -99,7 +99,7 @@ export default function ProfileSettingsPage() {
     return (
         <div className="max-w-2xl space-y-6">
             <div>
-                <h1 className="text-2xl font-semibold tracking-tight">Profile</h1>
+                <h1 className="text-3xl font-semibold tracking-tight">Profile</h1>
                 <p className="text-sm text-muted-foreground mt-1">
                     Update your profile picture and review your account details.
                 </p>
