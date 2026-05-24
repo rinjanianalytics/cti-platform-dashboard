@@ -102,24 +102,29 @@ const MODES: ModeDef[] = [
 /* Node colouring + sizing                                                    */
 /* -------------------------------------------------------------------------- */
 
+// Lower-case keys because the Neo4j-graph backend serialises node labels
+// as lowercase (`ioc`, `pulse`, …). Earlier this map used PascalCase and
+// every node fell through to DEFAULT_COLOR — graph rendered as a fog of
+// grey dots indistinguishable from one another.
 const TYPE_COLOR: Record<string, string> = {
-    IOC:           '#3b82f6',   // blue
-    Vulnerability: '#f59e0b',   // amber
-    CVE:           '#f59e0b',
-    Actor:         '#ef4444',   // red
-    ThreatActor:   '#ef4444',
-    Technique:     '#a855f7',   // purple
-    Tactic:        '#14b8a6',   // teal
-    Pulse:         '#10b981',   // emerald
-    Malware:       '#f97316',   // orange
-    Tool:          '#06b6d4',   // cyan
-    WebSource:     '#64748b',   // slate (orphan from Nexus removal)
+    ioc:           '#3b82f6',   // blue
+    vulnerability: '#f59e0b',   // amber
+    cve:           '#f59e0b',
+    actor:         '#ef4444',   // red
+    threatactor:   '#ef4444',
+    'threat-actor':'#ef4444',
+    technique:     '#a855f7',   // purple
+    tactic:        '#14b8a6',   // teal
+    pulse:         '#10b981',   // emerald
+    malware:       '#f97316',   // orange
+    tool:          '#06b6d4',   // cyan
+    websource:     '#64748b',   // slate (orphan from Nexus removal)
 };
 
 const DEFAULT_COLOR = '#94a3b8';
 
 function nodeColor(node: GraphNode): string {
-    return TYPE_COLOR[node.type] ?? DEFAULT_COLOR;
+    return TYPE_COLOR[node.type?.toLowerCase()] ?? DEFAULT_COLOR;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -172,14 +177,17 @@ export default function GraphExplorerPage() {
 
         // Re-centering policy: stay in current mode if the new value
         // makes sense for it (e.g. IOC-pivot can recenter on any IOC).
-        // Otherwise fall through to neighborhood expansion.
-        const sameModeIds: Record<Mode, (n: GraphNode) => string | null> = {
-            'ioc-pivot':       (n) => n.type === 'IOC' ? String(n.label || n.id) : null,
-            'attack-tree':     (n) => n.type === 'Actor' || n.type === 'ThreatActor' ? n.label : null,
-            'related-actors':  (n) => n.type === 'Actor' || n.type === 'ThreatActor' ? n.label : null,
-            'expand':          (n) => n.id,
+        // Otherwise fall through to neighborhood expansion. Match on
+        // lowercase since the backend serialises labels lowercase.
+        const t = n.type?.toLowerCase();
+        const isActor = t === 'actor' || t === 'threatactor' || t === 'threat-actor';
+        const sameModeIds: Record<Mode, () => string | null> = {
+            'ioc-pivot':       () => t === 'ioc' ? String(n.label || n.id) : null,
+            'attack-tree':     () => isActor ? n.label : null,
+            'related-actors':  () => isActor ? n.label : null,
+            'expand':          () => n.id,
         };
-        const queryable = sameModeIds[mode](n);
+        const queryable = sameModeIds[mode]();
         if (queryable) {
             setInputValue(queryable);
             setSubmittedValue(queryable);
@@ -286,12 +294,17 @@ export default function GraphExplorerPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="flex flex-wrap gap-3 text-xs">
-                        {Object.entries(TYPE_COLOR).map(([type, color]) => (
-                            <span key={type} className="flex items-center gap-1.5">
-                                <span className="size-3 rounded-full" style={{ background: color }} />
-                                <span className="font-mono text-[11px]">{type}</span>
-                            </span>
-                        ))}
+                        {[...new Set(Object.entries(TYPE_COLOR).map(([, c]) => c))].map(color => {
+                            const labels = Object.entries(TYPE_COLOR)
+                                .filter(([, c]) => c === color)
+                                .map(([t]) => t);
+                            return (
+                                <span key={color} className="flex items-center gap-1.5">
+                                    <span className="size-3 rounded-full" style={{ background: color }} />
+                                    <span className="font-mono text-[11px]">{labels[0]}</span>
+                                </span>
+                            );
+                        })}
                     </div>
                 </CardContent>
             </Card>
@@ -480,14 +493,29 @@ function NodeDetail({ node, mode: _mode }: { node: GraphNode | null; mode: Mode 
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono mb-1">ID</div>
                     <div className="font-mono text-[11px] text-muted-foreground break-all">{node.id}</div>
                 </div>
-                {Object.keys(node.properties ?? {}).length > 0 && (
-                    <div>
-                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono mb-1">Properties</div>
-                        <pre className="text-[10px] font-mono bg-muted/40 rounded p-2 overflow-auto max-h-48">
-                            {JSON.stringify(node.properties, null, 2)}
-                        </pre>
-                    </div>
-                )}
+                {(() => {
+                    const props = humanizeProps(node.properties ?? {});
+                    // Hide noisy/redundant keys: `pgId` duplicates `id`,
+                    // `value` duplicates `label`.
+                    const HIDE = new Set(['pgId', 'value']);
+                    const entries = Object.entries(props).filter(([k]) => !HIDE.has(k));
+                    if (entries.length === 0) return null;
+                    return (
+                        <div>
+                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono mb-1">Properties</div>
+                            <dl className="grid grid-cols-[100px_1fr] gap-x-3 gap-y-1.5 text-xs">
+                                {entries.map(([k, v]) => (
+                                    <div key={k} className="contents">
+                                        <dt className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground self-start">{k}</dt>
+                                        <dd className="font-mono text-xs break-all">
+                                            {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                                        </dd>
+                                    </div>
+                                ))}
+                            </dl>
+                        </div>
+                    );
+                })()}
                 {href && (
                     <a
                         href={href}
@@ -508,16 +536,54 @@ function NodeDetail({ node, mode: _mode }: { node: GraphNode | null; mode: Mode 
 
 /** Best-effort link to the existing entity page for a node. */
 function entityHref(node: GraphNode): string | null {
-    switch (node.type) {
-        case 'IOC':
-            return `/iocs?q=${encodeURIComponent(node.label || node.id)}`;
-        case 'CVE':
-        case 'Vulnerability':
-            return `/vulnerabilities/${encodeURIComponent(node.label || node.id)}`;
-        case 'Actor':
-        case 'ThreatActor':
-            return `/actors?q=${encodeURIComponent(node.label || node.id)}`;
-        default:
-            return null;
+    const t = node.type?.toLowerCase();
+    const v = encodeURIComponent(node.label || node.id);
+    switch (t) {
+        case 'ioc':            return `/iocs?q=${v}`;
+        case 'cve':
+        case 'vulnerability':  return `/vulnerabilities/${v}`;
+        case 'actor':
+        case 'threatactor':
+        case 'threat-actor':   return `/actors?q=${v}`;
+        default:               return null;
     }
+}
+
+/**
+ * Flatten Neo4j driver objects for human display. The Bolt driver wraps
+ *   - integers as `{ low, high }`  (Neo4j Integer to dodge JS precision loss)
+ *   - dates/datetimes as `{ year:{low,high}, month:{low,high}, … }`
+ * Rendered raw in <pre>JSON.stringify(…)</pre> these look like noise; this
+ * helper turns them into plain numbers and ISO strings.
+ */
+function humanizeProps(input: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(input)) out[k] = humanizeValue(v);
+    return out;
+}
+
+function humanizeValue(v: unknown): unknown {
+    if (v == null) return v;
+    if (typeof v !== 'object') return v;
+    const o = v as Record<string, unknown>;
+    // Neo4j Integer
+    if ('low' in o && 'high' in o && Object.keys(o).length === 2) {
+        return (o.high as number) * 0x100000000 + (o.low as number);
+    }
+    // Neo4j DateTime (has year/month/day/hour/minute/second sub-objects)
+    if ('year' in o && 'month' in o && 'day' in o) {
+        try {
+            const y = humanizeValue(o.year) as number;
+            const m = String((humanizeValue(o.month) as number)).padStart(2, '0');
+            const d = String((humanizeValue(o.day) as number)).padStart(2, '0');
+            const h = 'hour' in o ? String((humanizeValue(o.hour) as number)).padStart(2, '0') : '00';
+            const mi = 'minute' in o ? String((humanizeValue(o.minute) as number)).padStart(2, '0') : '00';
+            const s = 'second' in o ? String((humanizeValue(o.second) as number)).padStart(2, '0') : '00';
+            return `${y}-${m}-${d}T${h}:${mi}:${s}Z`;
+        } catch {
+            return v;
+        }
+    }
+    if (Array.isArray(v)) return v.map(humanizeValue);
+    return Object.fromEntries(Object.entries(o).map(([k, x]) => [k, humanizeValue(x)]));
 }
