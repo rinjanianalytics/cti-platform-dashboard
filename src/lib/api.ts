@@ -1113,3 +1113,60 @@ export function hitLabel(hit: SearchHit): string {
     return hit.title ?? hit.name ?? hit.value ?? hit.cveId ?? hit.id;
 }
 
+/* ---------------------------------------------------------------------- */
+/* Graph exploration (Neo4j)                                              */
+/* ---------------------------------------------------------------------- */
+
+export interface GraphNode {
+    id: string;
+    label: string;
+    type: string;
+    properties: Record<string, unknown>;
+}
+
+export interface GraphEdge {
+    source: string;
+    target: string;
+    type: string;
+    properties: Record<string, unknown>;
+}
+
+export interface GraphResult {
+    nodes: GraphNode[];
+    edges: GraphEdge[];
+    meta?: Record<string, unknown>;
+}
+
+interface GraphEnvelope { success: boolean; data: GraphResult; meta?: Record<string, unknown> }
+
+export const graphApi = {
+    /** IOC → Pulse → Actor → related IOCs. Pass the raw IOC value. */
+    async iocPivot(value: string, limit = 50): Promise<GraphResult> {
+        const r = await request<GraphEnvelope>(
+            `/v1/graph/ioc-pivot/${encodeURIComponent(value)}?limit=${limit}`,
+        );
+        return r.data;
+    },
+    /** Actor → Techniques → Tactics (MITRE chain). Pass the actor name. */
+    async attackTree(actor: string): Promise<GraphResult> {
+        const r = await request<GraphEnvelope>(
+            `/v1/graph/attack-tree/${encodeURIComponent(actor)}`,
+        );
+        return r.data;
+    },
+    /** N-hop neighborhood of any node. Pass the Neo4j-side node id (UUID or canonical key). */
+    async expand(id: string, depth = 1, limit = 50): Promise<GraphResult> {
+        const r = await request<GraphEnvelope>(
+            `/v1/graph/expand/${encodeURIComponent(id)}?depth=${depth}&limit=${limit}`,
+        );
+        return r.data;
+    },
+    /** Actors sharing >= `minShared` techniques with the named actor. */
+    async relatedActors(actor: string, minShared = 1): Promise<GraphResult> {
+        const r = await request<GraphEnvelope>(
+            `/v1/graph/related-actors/${encodeURIComponent(actor)}?minShared=${minShared}`,
+        );
+        return r.data;
+    },
+};
+
