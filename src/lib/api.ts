@@ -1137,41 +1137,42 @@ export interface GraphResult {
     meta?: Record<string, unknown>;
 }
 
-interface GraphEnvelope { success: boolean; data: GraphResult; meta?: Record<string, unknown> }
-
 // Graph endpoints live at /v2/graph (see apps/api/src/routes/v2.ts:26).
 // There's an older /v1/graph/neo4j/* set with the same shape, but v2 is the
 // canonical surface: full mode set, no `neo4j` infix, easier to reason about.
+//
+// `request<T>()` already unwraps the `{ success, data }` envelope (see the
+// auto-unwrap at line ~121 above) and returns the inner `data` directly.
+// Earlier this file double-wrapped with a `GraphEnvelope` type then
+// re-accessed `.data` — every call returned undefined, and the graph
+// page rendered nothing (no data, no loading, no error) because SWR
+// resolved with `data: undefined`.
 const GRAPH_BASE = '/v2/graph';
 
 export const graphApi = {
     /** IOC → Pulse → Actor → related IOCs. Pass the raw IOC value. */
-    async iocPivot(value: string, limit = 50): Promise<GraphResult> {
-        const r = await request<GraphEnvelope>(
+    iocPivot(value: string, limit = 50): Promise<GraphResult> {
+        return request<GraphResult>(
             `${GRAPH_BASE}/ioc-pivot/${encodeURIComponent(value)}?limit=${limit}`,
         );
-        return r.data;
     },
     /** Actor → Techniques → Tactics (MITRE chain). Pass the actor name. */
-    async attackTree(actor: string): Promise<GraphResult> {
-        const r = await request<GraphEnvelope>(
+    attackTree(actor: string): Promise<GraphResult> {
+        return request<GraphResult>(
             `${GRAPH_BASE}/attack-tree/${encodeURIComponent(actor)}`,
         );
-        return r.data;
     },
     /** N-hop neighborhood of any node. Pass the Neo4j-side node id (UUID or canonical key). */
-    async expand(id: string, depth = 1, limit = 50): Promise<GraphResult> {
-        const r = await request<GraphEnvelope>(
+    expand(id: string, depth = 1, limit = 50): Promise<GraphResult> {
+        return request<GraphResult>(
             `${GRAPH_BASE}/expand/${encodeURIComponent(id)}?depth=${depth}&limit=${limit}`,
         );
-        return r.data;
     },
     /** Actors sharing >= `minShared` techniques with the named actor. */
-    async relatedActors(actor: string, minShared = 1): Promise<GraphResult> {
-        const r = await request<GraphEnvelope>(
+    relatedActors(actor: string, minShared = 1): Promise<GraphResult> {
+        return request<GraphResult>(
             `${GRAPH_BASE}/related-actors/${encodeURIComponent(actor)}?minShared=${minShared}`,
         );
-        return r.data;
     },
 };
 
