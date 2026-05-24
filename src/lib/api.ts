@@ -800,7 +800,14 @@ export interface Vulnerability {
     cvssScore: number | null; severity: string | null;
     isExploited: boolean | null;
     vendorProject: string | null; product: string | null;
-    publishedDate: string | null; lastModified: string | null;
+    /** NVD's publication timestamp for the CVE. */
+    publishedDate: string | null;
+    /** NVD's lastModified timestamp. Null when the OpenSearch row was
+     *  indexed with the value stored only as `updatedAt`. */
+    lastModified: string | null;
+    /** Indexer's updatedAt — set to `lastModified` at index time, so use
+     *  this as the canonical "last touched" timestamp for the row. */
+    updatedAt: string | null;
 }
 
 export interface VulnListResponse {

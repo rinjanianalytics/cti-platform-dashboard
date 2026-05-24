@@ -153,6 +153,25 @@ export default function VulnerabilitiesPage() {
             sortable: true,
             cell: r => <span className="text-xs text-muted-foreground tabular-nums">{relTime(r.publishedDate)}</span>,
         },
+        {
+            // Prefer `updatedAt` (always populated from the OpenSearch index)
+            // over `lastModified` (often null because the indexer renames it).
+            // This is the freshness signal — "when did we last sync this CVE
+            // from NVD" — not just when it was first published.
+            id: 'updated',
+            header: 'Last sync',
+            width: 'w-20',
+            align: 'right',
+            accessor: r => {
+                const ts = r.updatedAt ?? r.lastModified;
+                return ts ? Date.parse(ts) : null;
+            },
+            sortable: true,
+            cell: r => {
+                const ts = r.updatedAt ?? r.lastModified;
+                return <span className="text-xs text-muted-foreground tabular-nums">{relTime(ts)}</span>;
+            },
+        },
     ];
 
     return (
