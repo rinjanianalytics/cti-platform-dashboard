@@ -8,11 +8,23 @@ import { auth as authApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { LoginLockup } from '@/components/brand/logo';
+import { BuildBadge } from '@/components/build-badge';
 import { cn } from '@/lib/utils';
 
+/**
+ * Login — Spotify-inspired structure:
+ *   1. Brand lockup, hero
+ *   2. Bold h1 ("Log in to Rinjani Analytics")
+ *   3. One-line positioning paragraph
+ *   4. Card containing the auth controls (OAuth stack → divider → API key form)
+ *   5. Capability strip below the card (kept from the previous design)
+ *   6. Footer (BuildBadge + operational pill)
+ *
+ * Brand discipline: only brand teal (`--brand`) as the accent. No other
+ * colored elements. Semantic destructive/success colours unused on this page.
+ */
 export default function LoginPage() {
     const { login } = useAuth();
     const [apiKey, setApiKey] = useState('');
@@ -20,14 +32,21 @@ export default function LoginPage() {
 
     const params = useSearchParams();
     const { data: providers } = useSWR('auth:oauth-providers', () => authApi.oauthProviders(), {
-        // Provider availability rarely changes; cache aggressively.
         revalidateOnFocus: false,
         dedupingInterval: 60_000,
     });
 
-    // Surface OAuth callback errors from the URL exactly once.
     useEffect(() => {
         const err = params.get('error');
+        const reason = params.get('reason');
+
+        // Session-expiry redirect from the API client. Different toast
+        // tone — it's expected, not a failure.
+        if (reason === 'expired') {
+            toast.info('Session expired', { description: 'Please sign in again.' });
+            return;
+        }
+
         if (!err) return;
         const human = err === 'invalid_state'
             ? 'OAuth state mismatch — please try again.'
@@ -53,73 +72,96 @@ export default function LoginPage() {
     const anyProvider = providers && (providers.google || providers.github);
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-background px-4 relative overflow-hidden">
+        <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4 py-10 relative overflow-hidden">
+            {/* Single ambient brand wash anchored top-center. Spotify's page is
+                visually clean — we keep one element of atmosphere because the
+                rest of the platform leans on dotted grids + brand glows. */}
             <div
                 aria-hidden
-                className="absolute inset-x-0 top-0 h-70 pointer-events-none"
+                className="absolute inset-x-0 -top-32 h-160 pointer-events-none"
                 style={{
                     background:
-                        'radial-gradient(ellipse 60% 100% at 50% 0%, color-mix(in oklch, var(--brand) 16%, transparent), transparent 70%)',
+                        'radial-gradient(ellipse 55% 70% at 50% 25%, color-mix(in oklch, var(--brand) 24%, transparent), transparent 70%)',
                 }}
             />
 
-            <div className="w-full max-w-sm relative">
-                <LoginLockup className="mb-8" />
+            <div className="w-full max-w-md relative motion-enter">
+                {/* Hero — lockup + bold headline + one-liner. */}
+                <div className="flex flex-col items-center text-center mb-7">
+                    <LoginLockup className="mb-6" />
+                    <h1 className="font-display text-3xl font-bold tracking-tight leading-tight">
+                        Log in to Rinjani Analytics
+                    </h1>
+                    <p className="mt-3 text-sm text-muted-foreground max-w-sm leading-relaxed">
+                        <span className="italic text-foreground/80">Threat intelligence, distilled.</span>{' '}
+                        Continuously ingests open-source feeds, correlates with
+                        vulnerabilities and actors, surfaces what matters.
+                    </p>
+                </div>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Sign in</CardTitle>
-                        <CardDescription>
-                            Use Google or GitHub for human access, or paste an API key for service-to-service automation.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {anyProvider && (
-                            <>
-                                <div className="space-y-2">
-                                    {providers!.google && (
-                                        <OAuthButton
-                                            provider="google"
-                                            label="Continue with Google"
-                                            icon={<GoogleIcon className="size-4" />}
-                                        />
-                                    )}
-                                    {providers!.github && (
-                                        <OAuthButton
-                                            provider="github"
-                                            label="Continue with GitHub"
-                                            icon={<GitHubIcon className="size-4" />}
-                                        />
-                                    )}
-                                </div>
-
-                                <Divider label="or" />
-                            </>
-                        )}
-
-                        <form onSubmit={handleSubmit} className="space-y-3">
-                            <div className="space-y-1.5">
-                                <Label htmlFor="api-key">API key</Label>
-                                <Input
-                                    id="api-key"
-                                    type="password"
-                                    placeholder="Paste your API key"
-                                    autoComplete="current-password"
-                                    value={apiKey}
-                                    onChange={(e) => setApiKey(e.target.value)}
-                                    autoFocus={!anyProvider}
+                {/* Auth card — Spotify-style containment. Clear edges, generous
+                    padding, holds the OAuth stack and the API-key form together. */}
+                <div className="rounded-2xl border border-border bg-card p-6 sm:p-7 shadow-xl shadow-black/20">
+                    {anyProvider && (
+                        <div className="space-y-2.5">
+                            {providers!.google && (
+                                <OAuthButton
+                                    provider="google"
+                                    label="Continue with Google"
+                                    icon={<GoogleIcon className="size-5" />}
                                 />
-                            </div>
-                            <Button type="submit" variant="outline" className="w-full" disabled={busy || !apiKey.trim()}>
-                                {busy ? 'Signing in…' : 'Sign in with API key'}
-                            </Button>
-                        </form>
-                    </CardContent>
-                </Card>
+                            )}
+                            {providers!.github && (
+                                <OAuthButton
+                                    provider="github"
+                                    label="Continue with GitHub"
+                                    icon={<GitHubIcon className="size-5" />}
+                                />
+                            )}
+                        </div>
+                    )}
 
-                <p className="text-[10px] text-muted-foreground text-center mt-6 font-mono uppercase tracking-wider">
-                    v304 · cti platform
-                </p>
+                    {anyProvider && <Divider label="or" />}
+
+                    {/* API key — service-to-service path. Submit is the brand-fill
+                        primary CTA, matching Spotify's filled "Log in" affordance. */}
+                    <form onSubmit={handleSubmit} className="space-y-3">
+                        <div className="space-y-1.5">
+                            <Label
+                                htmlFor="api-key"
+                                className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground"
+                            >
+                                API key
+                            </Label>
+                            <Input
+                                id="api-key"
+                                type="password"
+                                placeholder="rnj_•••••••••••••••••••••••"
+                                autoComplete="current-password"
+                                value={apiKey}
+                                onChange={(e) => setApiKey(e.target.value)}
+                                autoFocus={!anyProvider}
+                                className="h-11 font-mono text-xs"
+                            />
+                        </div>
+                        <Button
+                            type="submit"
+                            className="w-full h-11 font-semibold"
+                            disabled={busy || !apiKey.trim()}
+                        >
+                            {busy ? 'Signing in…' : 'Log in with API key'}
+                        </Button>
+                    </form>
+                </div>
+
+                {/* Footer — build badge + live operational pill. */}
+                <div className="mt-10 flex items-center justify-between gap-3">
+                    <BuildBadge className="min-w-0" />
+                    <span className="shrink-0 inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground/70">
+                        <span aria-hidden className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        operational
+                    </span>
+                </div>
             </div>
         </div>
     );
@@ -127,27 +169,41 @@ export default function LoginPage() {
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Spotify-style social auth button — large (h-12), full-width, icon on the
+ * left, label centered. Inviting at rest (full card background, subtle inset
+ * brand ring), with a brand-tinted halo on hover.
+ */
 function OAuthButton({
     provider, label, icon,
 }: { provider: 'google' | 'github'; label: string; icon: React.ReactNode }) {
     return (
-        <Button
+        <button
             type="button"
-            variant="outline"
-            className="w-full justify-start gap-3 font-medium"
             onClick={() => { window.location.href = authApi.oauthStartUrl(provider); }}
+            className={cn(
+                'group relative w-full inline-flex items-center justify-center h-12 rounded-lg',
+                'border border-border bg-background text-foreground text-sm font-semibold',
+                'shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--brand)_6%,transparent)]',
+                'hover:border-brand/50 hover:shadow-[0_0_0_1px_color-mix(in_oklch,var(--brand)_40%,transparent),0_4px_24px_-8px_color-mix(in_oklch,var(--brand)_35%,transparent)]',
+                'transition-[box-shadow,border-color] duration-150',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60',
+            )}
         >
-            {icon}
-            {label}
-        </Button>
+            {/* Icon pinned left, label optically centered (matches Spotify). */}
+            <span className="absolute left-4 inline-flex items-center text-foreground/80 group-hover:text-foreground transition-colors">
+                {icon}
+            </span>
+            <span>{label}</span>
+        </button>
     );
 }
 
 function Divider({ label }: { label: string }) {
     return (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 my-5">
             <span className="flex-1 h-px bg-border" />
-            <span className={cn('text-[10px] font-medium uppercase tracking-wider text-muted-foreground')}>
+            <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground/80">
                 {label}
             </span>
             <span className="flex-1 h-px bg-border" />
@@ -155,7 +211,7 @@ function Divider({ label }: { label: string }) {
     );
 }
 
-/* Brand-accurate marks, single colour so they pick up `currentColor`. */
+/* Brand-accurate marks. */
 function GoogleIcon({ className }: { className?: string }) {
     return (
         <svg viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" className={className} aria-hidden="true">

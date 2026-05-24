@@ -19,7 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ArrowLeft, ShieldOff, Clock } from 'lucide-react';
 import { toast } from 'sonner';
-import { cn, SEVERITY_TONE, relTime } from '@/lib/utils';
+import { cn, severityTone, relTime } from '@/lib/utils';
 import { SimilarPanel } from '@/components/similar-panel';
 
 const VERDICTS = ['malicious', 'suspicious', 'benign', 'unknown'] as const;
@@ -60,12 +60,12 @@ export default function IOCDetailPage({ params }: { params: Promise<{ id: string
                         <div className="flex items-center gap-2">
                             <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">{ioc.type}</span>
                             {ioc.severity && (
-                                <Badge variant="outline" className={cn('font-mono text-[10px] uppercase', SEVERITY_TONE[ioc.severity] ?? '')}>
+                                <Badge variant="outline" className={cn('font-mono text-[10px] uppercase', severityTone(ioc.severity))}>
                                     {ioc.severity}
                                 </Badge>
                             )}
                         </div>
-                        <h1 className="text-2xl font-mono mt-1 break-all">{ioc.value}</h1>
+                        <h1 className="text-3xl font-mono mt-1 break-all">{ioc.value}</h1>
                         <p className="text-xs text-muted-foreground mt-1">
                             From <span className="font-medium text-foreground">{ioc.source}</span>
                             {ioc.firstSeen && <> · first seen {relTime(ioc.firstSeen)}</>}

@@ -15,7 +15,7 @@ export function LogoMark({ className, size = 28 }: {
         // eslint-disable-next-line @next/next/no-img-element
         <img
             src="/logo.svg"
-            alt="Rinjani"
+            alt="Rinjani Analytics"
             width={size}
             height={size}
             className={cn('shrink-0 select-none', className)}
@@ -36,8 +36,8 @@ export function Logo({ className, size = 28, showWordmark = true }: {
         <span className={cn('inline-flex items-center gap-3 select-none', className)}>
             <LogoMark size={size} />
             {showWordmark && (
-                <span className="font-display text-sm font-semibold tracking-tight text-foreground">
-                    Rinjani
+                <span className="font-display text-sm font-semibold tracking-tight text-foreground whitespace-nowrap">
+                    Rinjani Analytics
                 </span>
             )}
         </span>
@@ -45,18 +45,18 @@ export function Logo({ className, size = 28, showWordmark = true }: {
 }
 
 /**
- * Auth-screen lockup — larger mark with the uppercase "RINJANI" wordmark
- * and the "Command Center" tagline used by v303's auth layout.
+ * Auth-screen lockup — larger mark with the full uppercase "RINJANI ANALYTICS"
+ * wordmark and a "Command Center" sub-tagline naming the specific surface.
  */
 export function LoginLockup({ className }: { className?: string }) {
     return (
         <div className={cn('flex items-center gap-3', className)}>
             <LogoMark size={44} className="rounded-lg" />
             <div className="leading-none">
-                <p className="font-display text-2xl font-extrabold uppercase tracking-[0.12em] text-foreground">
-                    Rinjani
+                <p className="font-display text-xl font-extrabold uppercase tracking-[0.12em] text-foreground whitespace-nowrap">
+                    Rinjani Analytics
                 </p>
-                <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mt-1">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mt-1.5">
                     Command Center
                 </p>
             </div>

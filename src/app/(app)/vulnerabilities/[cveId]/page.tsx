@@ -11,16 +11,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, ShieldAlert, ExternalLink, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { cn, SEVERITY_TONE, relTime } from '@/lib/utils';
+import { cn, severityTone, cvssTone, relTime } from '@/lib/utils';
 import { SimilarPanel } from '@/components/similar-panel';
-
-function cvssTone(score: number | null | undefined): string {
-    if (score == null) return 'text-muted-foreground';
-    if (score >= 9) return 'text-red-400';
-    if (score >= 7) return 'text-amber-400';
-    if (score >= 4) return 'text-blue-400';
-    return 'text-emerald-400';
-}
 
 export default function VulnerabilityDetailPage({ params }: { params: Promise<{ cveId: string }> }) {
     const { cveId } = use(params);
@@ -39,11 +31,12 @@ export default function VulnerabilityDetailPage({ params }: { params: Promise<{ 
                 toast.info('Nothing applied', {
                     description: r.reason === 'already-scored'
                         ? 'This CVE already has a CVSS score.'
-                        : 'NVD has no CVSS data for this CVE.',
+                        : 'Neither OSV nor NVD has CVSS data for this CVE.',
                 });
             } else {
+                const sourceLabel = r.source === 'osv' ? 'OSV' : 'NVD';
                 toast.success(`CVSS ${r.score?.toFixed(1)} (${r.severity})`, {
-                    description: `From NVD ${r.version}`,
+                    description: `From ${sourceLabel} ${r.version}`,
                 });
                 await mutate();
             }
@@ -86,9 +79,9 @@ export default function VulnerabilityDetailPage({ params }: { params: Promise<{ 
                 <div className="flex items-start justify-between gap-4 mt-2">
                     <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                            <h1 className="text-2xl font-mono">{vuln.cveId ?? '—'}</h1>
+                            <h1 className="text-3xl font-mono">{vuln.cveId ?? '—'}</h1>
                             {vuln.severity && (
-                                <Badge variant="outline" className={cn('font-mono text-[10px] uppercase', SEVERITY_TONE[vuln.severity.toLowerCase()] ?? '')}>
+                                <Badge variant="outline" className={cn('font-mono text-[10px] uppercase', severityTone(vuln.severity))}>
                                     {vuln.severity}
                                 </Badge>
                             )}

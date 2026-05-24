@@ -22,8 +22,37 @@ export function setToken(t: string | null) {
     else window.localStorage.removeItem(TOKEN_KEY);
 }
 
+/**
+ * Canonical envelope shapes — match `apps/api/src/middleware/error.ts` and
+ * `apps/api/src/lib/errors.ts`. The server emits exactly one of these for
+ * every JSON response. Adding a third shape is a bug.
+ */
+interface SuccessEnvelope<T> {
+    success: true;
+    data: T;
+}
+interface ErrorEnvelope {
+    success: false;
+    error: {
+        code: string;
+        message: string;
+        statusCode?: number;
+        details?: unknown;
+    };
+}
+
+/**
+ * Thrown for any non-2xx response. Carries the machine-readable `code`
+ * (e.g. `'NOT_FOUND'`, `'VALIDATION_ERROR'`) so callers can branch without
+ * parsing the message. `body` keeps the full envelope for diagnostics.
+ */
 export class ApiError extends Error {
-    constructor(public status: number, message: string, public body?: unknown) {
+    constructor(
+        public status: number,
+        message: string,
+        public code: string,
+        public body?: unknown,
+    ) {
         super(message);
         this.name = 'ApiError';
     }
@@ -55,41 +84,44 @@ async function request<T>(path: string, init: RequestInit2 = {}): Promise<T> {
     }
 
     if (!res.ok) {
-        const obj = (parsed as { error?: { message?: string } | string } | null) ?? null;
-        const msg = typeof obj?.error === 'string'
-            ? obj.error
-            : obj?.error?.message ?? `${res.status} ${res.statusText}`;
-        throw new ApiError(res.status, msg, parsed);
+        const env = parsed as Partial<ErrorEnvelope> | null;
+        const err = env?.error;
+
+        // 401 means the token is expired/invalid (24h JWT lifetime). Clear
+        // it so the AuthProvider's route guard kicks in and bounces the
+        // user to /login on the next render. We do NOT redirect from here
+        // directly — leaving routing to the React layer keeps the auth
+        // flow consistent regardless of whether the 401 came from a SWR
+        // background poll, a user-triggered POST, or a SSE reconnection.
+        //
+        // The first 401 of a session triggers a one-shot redirect via the
+        // AuthProvider. Subsequent calls (e.g. SWR retrying) will keep
+        // getting 401 silently — that's fine, they unmount once routing
+        // lands on /login.
+        if (res.status === 401 && typeof window !== 'undefined') {
+            setToken(null);
+            // Only navigate if we're not already on the login page —
+            // prevents an infinite loop if the login flow itself 401s.
+            if (!window.location.pathname.startsWith('/login')) {
+                window.location.assign('/login?reason=expired');
+            }
+        }
+
+        throw new ApiError(
+            res.status,
+            err?.message ?? `${res.status} ${res.statusText}`,
+            err?.code ?? `HTTP_${res.status}`,
+            parsed,
+        );
     }
 
-    // Backend returns { success: true, data: <body> } for most endpoints.
-    // If the response has both `success` and `data`, unwrap once.
-    const unwrapped = (parsed && typeof parsed === 'object' && 'success' in parsed && 'data' in parsed)
-        ? (parsed as { data: unknown }).data
-        : parsed;
-
-    return normalisePagination(unwrapped) as T;
-}
-
-/**
- * The backend pagination shape is `{ page, pageSize, totalItems, totalPages }`
- * but every list-response interface in this file (and downstream UI) expects
- * `{ page, pageSize, total, pages }`. Normalise at the boundary so the
- * contract holds for every list endpoint without per-call coercion.
- */
-function normalisePagination(value: unknown): unknown {
-    if (!value || typeof value !== 'object') return value;
-    const obj = value as Record<string, unknown>;
-    const pg = obj.pagination as Record<string, unknown> | undefined;
-    if (pg && (pg.totalItems !== undefined || pg.totalPages !== undefined)) {
-        obj.pagination = {
-            page: pg.page,
-            pageSize: pg.pageSize,
-            total: pg.total ?? pg.totalItems ?? 0,
-            pages: pg.pages ?? pg.totalPages ?? 0,
-        };
+    // Standard envelope: { success: true, data: T }. A small number of
+    // info endpoints (/v2, /opengate root, swagger) return raw JSON — we
+    // fall through and return parsed as-is for those.
+    if (parsed && typeof parsed === 'object' && 'success' in parsed && 'data' in parsed) {
+        return (parsed as SuccessEnvelope<T>).data;
     }
-    return value;
+    return parsed as T;
 }
 
 // =============================================================================
@@ -245,6 +277,19 @@ export interface AdminServicesReport {
         ollama: { available: boolean };
     };
     optionalServices: Record<string, { available: boolean; configured: boolean }>;
+    /**
+     * Enrichment data sources used by the CVE enrichment pipeline.
+     * Currently: OSV (primary, public) + NVD (fallback, rate-limited).
+     * Pipeline tries them in that order; falls back NVD if OSV doesn't
+     * have a given CVE.
+     */
+    enrichmentSources: Record<string, {
+        available: boolean;
+        configured: boolean;
+        latencyMs?: number;
+        note?: string;
+        error?: string;
+    }>;
     queues: Array<{ name: string; waiting: number; active: number; completed: number; failed: number; delayed: number }>;
     feeds: Array<{
         feed: string;
@@ -259,6 +304,37 @@ export interface AdminServicesReport {
     timestamp: string;
 }
 
+export interface QueueStats {
+    name: string;
+    waiting: number;
+    active: number;
+    completed: number;
+    failed: number;
+    delayed: number;
+    isPaused: boolean;
+}
+
+export interface QueueJob {
+    id: string;
+    name: string;
+    state: string;
+    data: Record<string, unknown>;
+    result: unknown;
+    failedReason: string | null;
+    attemptsMade: number;
+    timestamp: number;
+    processedOn: number | null;
+    finishedOn: number | null;
+    progress: number | object;
+}
+
+export interface QueueJobDetail extends QueueJob {
+    queue: string;
+    stacktrace: string[] | null;
+}
+
+export type QueueJobState = 'waiting' | 'active' | 'completed' | 'failed' | 'delayed';
+
 export const admin = {
     async services(): Promise<AdminServicesReport> {
         return request('/admin/services');
@@ -266,6 +342,170 @@ export const admin = {
     /** Queue an immediate sync for a given feed. Returns the BullMQ job id. */
     async syncFeed(source: string): Promise<{ jobId: string; queue: string; source: string; status: string }> {
         return request('/admin/jobs/feed-sync', { method: 'POST', body: { source } });
+    },
+    /* Queue control ------------------------------------------------------ */
+    async queueStats(): Promise<{ queues: QueueStats[]; timestamp: string }> {
+        return request('/admin/stats');
+    },
+    async pauseQueue(name: string): Promise<{ queue: string; status: string }> {
+        return request(`/admin/queue/${encodeURIComponent(name)}/pause`, { method: 'POST' });
+    },
+    async resumeQueue(name: string): Promise<{ queue: string; status: string }> {
+        return request(`/admin/queue/${encodeURIComponent(name)}/resume`, { method: 'POST' });
+    },
+    async drainQueue(name: string): Promise<{ queue: string; action: string }> {
+        return request(`/admin/queue/${encodeURIComponent(name)}/drain`, { method: 'POST' });
+    },
+    async retryAllFailed(name: string): Promise<{ queue: string; retried: number; totalFailed: number }> {
+        return request(`/admin/queue/${encodeURIComponent(name)}/retry-all`, { method: 'POST' });
+    },
+    /** state: 'completed' | 'failed' | 'delayed' | 'wait' | 'active' */
+    async cleanQueue(name: string, state: string, opts: { grace?: number; limit?: number } = {}): Promise<{
+        queue: string; state: string; removed: number;
+    }> {
+        const qs = new URLSearchParams();
+        if (opts.grace !== undefined) qs.set('grace', String(opts.grace));
+        if (opts.limit !== undefined) qs.set('limit', String(opts.limit));
+        return request(
+            `/admin/queue/${encodeURIComponent(name)}/clean/${state}${qs.toString() ? `?${qs}` : ''}`,
+            { method: 'POST' },
+        );
+    },
+    async listQueueJobs(name: string, opts: {
+        state?: QueueJobState; start?: number; limit?: number;
+    } = {}): Promise<{ queue: string; state: string; start: number; limit: number; jobs: QueueJob[] }> {
+        const qs = new URLSearchParams();
+        if (opts.state) qs.set('state', opts.state);
+        if (opts.start !== undefined) qs.set('start', String(opts.start));
+        if (opts.limit !== undefined) qs.set('limit', String(opts.limit));
+        return request(`/admin/queue/${encodeURIComponent(name)}/jobs${qs.toString() ? `?${qs}` : ''}`);
+    },
+    async getQueueJob(queue: string, jobId: string): Promise<QueueJobDetail> {
+        return request(`/admin/queue/${encodeURIComponent(queue)}/job/${encodeURIComponent(jobId)}`);
+    },
+    async retryQueueJob(queue: string, jobId: string): Promise<{ queue: string; jobId: string; action: string }> {
+        return request(`/admin/queue/${encodeURIComponent(queue)}/job/${encodeURIComponent(jobId)}/retry`, { method: 'POST' });
+    },
+    /** Force a delayed job to run now (moves delayed → waiting). */
+    async promoteQueueJob(queue: string, jobId: string): Promise<{ queue: string; jobId: string; action: string }> {
+        return request(`/admin/queue/${encodeURIComponent(queue)}/job/${encodeURIComponent(jobId)}/promote`, { method: 'POST' });
+    },
+    async removeQueueJob(queue: string, jobId: string): Promise<{ queue: string; jobId: string; action: string }> {
+        return request(`/admin/queue/${encodeURIComponent(queue)}/job/${encodeURIComponent(jobId)}`, { method: 'DELETE' });
+    },
+    /* Job runners (one-click bulk ops) ----------------------------------- */
+    async runCvssBackfill(): Promise<{ status: string; jobId?: string; message: string }> {
+        return request('/admin/jobs/cvss-backfill', { method: 'POST' });
+    },
+    async runIocEnrichSweep(): Promise<{ status: string; enqueued: number; message: string }> {
+        return request('/admin/jobs/ioc-enrich-sweep', { method: 'POST' });
+    },
+    /* Live job activity feed -------------------------------------------- */
+    async recentActivity(opts: {
+        limit?: number;
+        queue?: string;
+        sinceSeq?: number;
+    } = {}): Promise<{ events: ActivityEvent[]; count: number }> {
+        const qs = new URLSearchParams();
+        if (opts.limit) qs.set('limit', String(opts.limit));
+        if (opts.queue) qs.set('queue', opts.queue);
+        if (opts.sinceSeq !== undefined) qs.set('sinceSeq', String(opts.sinceSeq));
+        const q = qs.toString();
+        return request(`/admin/activity/recent${q ? `?${q}` : ''}`);
+    },
+    async activityThroughput(): Promise<{ queues: ActivityThroughput[] }> {
+        return request('/admin/activity/throughput');
+    },
+    async activityFailures(): Promise<{ groups: ActivityFailureGroup[] }> {
+        return request('/admin/activity/failures');
+    },
+    /* Feed-centric management ------------------------------------------- */
+    async listFeeds(): Promise<{ feeds: FeedScheduleEntry[]; count: number }> {
+        return request('/admin/feeds');
+    },
+    async feedHistory(feedId: string, limit = 20): Promise<{
+        feedId: string;
+        runs: FeedSyncRun[];
+        count: number;
+    }> {
+        return request(`/admin/feeds/${encodeURIComponent(feedId)}/history?limit=${limit}`);
+    },
+    /** URL for SSE; consumer should new EventSource(url) with cookie/auth. */
+    activityStreamUrl(): string {
+        // Token must travel as query param — EventSource can't set headers.
+        const token = getToken();
+        const base = `${API_URL}/admin/activity/stream`;
+        return token ? `${base}?api_key=${encodeURIComponent(token)}` : base;
+    },
+    async runNvdSync(): Promise<{ status: string; cves: number; processed: number; errors: string[] }> {
+        return request('/admin/jobs/nvd-sync', { method: 'POST' });
+    },
+    /**
+     * Trigger a Neo4j graph sync. Sync types match the worker's switch in
+     * apps/api/src/queues/workers/neo4jSyncWorker.ts — passing anything else
+     * makes the job fail with "Unknown sync type".
+     */
+    async runNeo4jSync(
+        syncType: 'full' | 'actors' | 'techniques' | 'malware' | 'tools' |
+            'relationships' | 'pulses-iocs' | 'all-iocs' | 'cves' | 'similarity'
+            = 'actors',
+    ): Promise<{ jobId: string }> {
+        return request('/admin/jobs/neo4j-sync', { method: 'POST', body: { syncType } });
+    },
+    async runVulnEnrichBulk(limit?: number): Promise<{
+        considered: number; enriched: number; notFound: number; errors: Array<{ cveId: string; error: string }>;
+    }> {
+        return request('/v1/vulnerabilities/enrich/bulk', { method: 'POST', body: { limit } });
+    },
+    async runActorEnrichBulk(limit?: number): Promise<{
+        considered: number; enriched: number; skipped: number; errors: Array<{ id: string; name: string; error: string }>;
+    }> {
+        return request('/v1/threats/enrich/bulk', { method: 'POST', body: { limit } });
+    },
+    /* Scheduled-job control --------------------------------------------- */
+    async listSchedules(): Promise<{
+        jobs: ScheduledJob[];
+        intervalPresets: Record<IntervalPreset, string>;
+        count: number;
+    }> {
+        return request('/admin/schedules');
+    },
+    async updateSchedule(key: string, patch: {
+        enabled?: boolean;
+        intervalPreset?: IntervalPreset | null;
+        payload?: Record<string, unknown> | null;
+    }): Promise<{
+        override: ScheduledJobOverride;
+        reconciled: { key: string; status: 'enabled' | 'disabled'; cron?: string };
+    }> {
+        return request(`/admin/schedules/${encodeURIComponent(key)}`, { method: 'PATCH', body: patch });
+    },
+    async runScheduleNow(key: string): Promise<{ jobId: string; queue: string; key: string }> {
+        return request(`/admin/schedules/${encodeURIComponent(key)}/run-now`, { method: 'POST' });
+    },
+    /* Audit log inspection ---------------------------------------------- */
+    async listAudit(opts: {
+        entityType?: AuditEntityType; action?: string; from?: string; to?: string;
+        page?: number; limit?: number;
+    } = {}): Promise<{ entries: AuditEntry[]; total: number; page: number; limit: number }> {
+        const qs = new URLSearchParams();
+        if (opts.entityType) qs.set('entityType', opts.entityType);
+        if (opts.action) qs.set('action', opts.action);
+        if (opts.from) qs.set('from', opts.from);
+        if (opts.to) qs.set('to', opts.to);
+        if (opts.page) qs.set('page', String(opts.page));
+        if (opts.limit) qs.set('limit', String(opts.limit));
+        return request(`/admin/audit${qs.toString() ? `?${qs}` : ''}`);
+    },
+    async auditStats(days = 30): Promise<{
+        total: number; days: number;
+        byAction: Array<{ action: string; count: number }>;
+        byEntity: Array<{ entityType: string; count: number }>;
+    }> {
+        return request(`/admin/audit/stats?days=${days}`);
+    },
+    async getAuditEntry(id: string): Promise<AuditEntry> {
+        return request(`/admin/audit/${encodeURIComponent(id)}`);
     },
     /* User management ---------------------------------------------------- */
     async listUsers(opts: {
@@ -325,12 +565,172 @@ export interface AdminUser {
     updatedAt: string;
 }
 
+export type ActivityKind = 'active' | 'completed' | 'failed' | 'progress';
+
+export interface ActivityEvent {
+    ts: string;
+    queue: string;
+    jobId: string;
+    kind: ActivityKind;
+    result?: unknown;
+    error?: string;
+    progress?: unknown;
+    seq: number;
+}
+
+export interface ActivityThroughput {
+    queue: string;
+    total: number;
+    byKind: Record<ActivityKind, number>;
+    lastAt: string | null;
+}
+
+export interface ActivityFailureGroup {
+    signature: string;
+    sample: string;
+    count: number;
+    queues: string[];
+    firstSeen: string;
+    lastSeen: string;
+}
+
+export interface FeedSyncRun {
+    id: string;
+    feedId: string;
+    status: 'running' | 'completed' | 'failed' | string;
+    startedAt: string;
+    completedAt: string | null;
+    durationMs: number | null;
+    itemsIngested: number;
+    errors: number;
+    errorDetails: string | null;
+    triggeredBy: 'scheduler' | 'manual' | string;
+}
+
+export interface FeedScheduleEntry {
+    key: string;            // registry key (e.g. 'otxSync')
+    source: string;         // feed_sync_runs.feed_id (e.g. 'otx')
+    name: string;
+    description: string;
+    defaultCron: string;
+    effectiveCron: string | null;
+    enabled: boolean;
+    override: {
+        enabled: boolean;
+        intervalPreset: IntervalPreset | null;
+        payload: Record<string, unknown> | null;
+        updatedAt: string;
+        updatedBy: string | null;
+    } | null;
+    lastRun: {
+        status: 'completed' | 'failed' | string;
+        startedAt: string;
+        completedAt: string | null;
+        durationMs: number | null;
+        itemsIngested: number;
+        errors: number;
+        errorDetails: string | null;
+        triggeredBy: string;
+    } | null;
+}
+
+export type IntervalPreset = '15m' | '30m' | '1h' | '4h' | '6h' | 'daily' | 'weekly';
+
+export interface ScheduledJobOverride {
+    jobKey: string;
+    enabled: boolean;
+    intervalPreset: IntervalPreset | null;
+    payload: Record<string, unknown> | null;
+    updatedAt: string;
+    updatedBy: string | null;
+}
+
+export interface ScheduledJob {
+    key: string;
+    jobId: string;
+    name: string;
+    description: string;
+    defaultCron: string;
+    queueName: string;
+    payload: Record<string, unknown>;
+    override: {
+        enabled: boolean;
+        intervalPreset: IntervalPreset | null;
+        payload: Record<string, unknown> | null;
+        updatedAt: string;
+        updatedBy: string | null;
+    } | null;
+    enabled: boolean;
+    effectiveCron: string | null;
+}
+
+export type AuditEntityType =
+    | 'ioc' | 'vulnerability' | 'threat_actor' | 'pulse'
+    | 'indicator' | 'malware' | 'user';
+
+export type AuditAction = 'create' | 'update' | 'delete' | 'merge' | 'enrich';
+
+export interface AuditEntry {
+    id: string;
+    entityType: AuditEntityType;
+    entityId: string;
+    action: AuditAction;
+    userId: string | null;
+    apiKeyId: string | null;
+    source: string | null;
+    changes: {
+        before?: Record<string, unknown>;
+        after?: Record<string, unknown>;
+        diff?: Array<{ field: string; old: unknown; new: unknown }>;
+    } | null;
+    metadata: Record<string, unknown> | null;
+    createdAt: string;
+}
+
 export interface AdminRole {
     id: string;
     name: string;
     description?: string;
     permissions?: string[];
 }
+
+/* ---------------------------------------------------------------------- */
+/* Notifications                                                          */
+/* ---------------------------------------------------------------------- */
+
+export type NotificationKind = 'info' | 'warning' | 'error' | 'success' | string;
+
+export interface AppNotification {
+    id: string;
+    type: NotificationKind;
+    title: string;
+    message: string;
+    source: string;
+    read: boolean;
+    metadata: Record<string, unknown> | null;
+    createdAt: string;
+}
+
+export const notifications = {
+    async list(opts: { limit?: number; offset?: number } = {}): Promise<AppNotification[]> {
+        const qs = new URLSearchParams();
+        if (opts.limit) qs.set('limit', String(opts.limit));
+        if (opts.offset) qs.set('offset', String(opts.offset));
+        const query = qs.toString();
+        return request(`/v1/notifications${query ? `?${query}` : ''}`);
+    },
+    async unreadCount(): Promise<number> {
+        const res = await request<{ count: number }>('/v1/notifications/unread-count');
+        return res.count;
+    },
+    /** Pass an id to mark one read; omit to mark all read. */
+    async markRead(id?: string): Promise<void> {
+        await request('/v1/notifications/mark-read', {
+            method: 'POST',
+            body: id ? { id } : {},
+        });
+    },
+};
 
 export const platform = {
     async stats(): Promise<{ counts: Stats }> {
@@ -356,12 +756,10 @@ export const platform = {
         return request(`/v1/actors/active?limit=${limit}`);
     },
     async landscape(): Promise<LandscapeOverview> {
-        const raw = await request<LandscapeOverviewRaw>('/v1/landscape/overview');
-        return normaliseLandscape(raw);
+        return request('/v1/landscape/overview');
     },
     async sourceBreakdown(): Promise<Array<{ source: string; count: number }>> {
-        const raw = await request<Array<{ source: string; count: number | string }>>('/v1/stats/source-breakdown');
-        return raw.map(r => ({ source: r.source, count: Number(r.count) || 0 }));
+        return request('/v1/stats/source-breakdown');
     },
     async trendingTags(): Promise<Array<{ tag: string; count: number; hot: boolean }>> {
         return request('/v1/stats/trending-tags');
@@ -393,34 +791,6 @@ export interface LandscapeOverview {
     severityDistribution: Array<{ severity: string | null; count: number }>;
 }
 
-interface LandscapeOverviewRaw {
-    period: string;
-    iocs: { total: string | number; critical: string | number; high: string | number; avgScore?: number; avg_score?: string };
-    vulnerabilities: { total: string | number; critical: string | number; high: string | number };
-    notifications: { total: string | number };
-    iocTypeDistribution: Array<{ type: string; count: string | number }>;
-    topSources: Array<{ source: string; count: string | number }>;
-    severityDistribution: Array<{ severity: string | null; count: string | number }>;
-}
-
-function n(v: string | number | null | undefined): number {
-    if (v == null) return 0;
-    const x = typeof v === 'number' ? v : Number(v);
-    return Number.isFinite(x) ? x : 0;
-}
-
-function normaliseLandscape(r: LandscapeOverviewRaw): LandscapeOverview {
-    return {
-        period: r.period,
-        iocs: { total: n(r.iocs.total), critical: n(r.iocs.critical), high: n(r.iocs.high), avgScore: r.iocs.avgScore ?? n(r.iocs.avg_score) },
-        vulnerabilities: { total: n(r.vulnerabilities.total), critical: n(r.vulnerabilities.critical), high: n(r.vulnerabilities.high) },
-        notifications: { total: n(r.notifications.total) },
-        iocTypeDistribution: r.iocTypeDistribution.map(x => ({ type: x.type, count: n(x.count) })),
-        topSources: r.topSources.map(x => ({ source: x.source, count: n(x.count) })),
-        severityDistribution: r.severityDistribution.map(x => ({ severity: x.severity, count: n(x.count) })),
-    };
-}
-
 // =============================================================================
 // Vulnerabilities
 // =============================================================================
@@ -439,18 +809,6 @@ export interface VulnListResponse {
     facets?: Record<string, Record<string, number>>;
 }
 
-/** postgres numeric → node-pg string → OpenSearch _source string. Coerce here. */
-function normaliseVuln<T extends { cvssScore?: unknown }>(v: T): T & { cvssScore: number | null } {
-    const raw = v.cvssScore;
-    let score: number | null = null;
-    if (typeof raw === 'number' && Number.isFinite(raw)) score = raw;
-    else if (typeof raw === 'string' && raw.trim()) {
-        const n = Number(raw);
-        if (Number.isFinite(n)) score = n;
-    }
-    return { ...v, cvssScore: score };
-}
-
 export const vulns = {
     async list(opts: {
         page?: number; pageSize?: number; q?: string;
@@ -466,14 +824,10 @@ export const vulns = {
         if (opts.dateFrom) qs.set('dateFrom', opts.dateFrom);
         if (opts.dateTo) qs.set('dateTo', opts.dateTo);
         const query = qs.toString();
-        const res = await request<VulnListResponse>(`/v1/vulnerabilities${query ? `?${query}` : ''}`);
-        return { ...res, items: res.items.map(normaliseVuln) };
+        return request(`/v1/vulnerabilities${query ? `?${query}` : ''}`);
     },
     async get(cveId: string): Promise<Vulnerability & { rawData?: Record<string, unknown> | null }> {
-        const res = await request<Vulnerability & { rawData?: Record<string, unknown> | null }>(
-            `/v1/vulnerabilities/${encodeURIComponent(cveId)}`,
-        );
-        return normaliseVuln(res);
+        return request(`/v1/vulnerabilities/${encodeURIComponent(cveId)}`);
     },
     /** Fetch CVSS from NVD for a single CVE; skipped if already scored. */
     async enrich(cveId: string): Promise<{
@@ -484,6 +838,8 @@ export const vulns = {
         vector?: string;
         severity?: string;
         version?: 'v3.1' | 'v3.0' | 'v2';
+        /** Which data source served the enrichment. */
+        source?: 'osv' | 'nvd';
     }> {
         return request(`/v1/vulnerabilities/${encodeURIComponent(cveId)}/enrich`, { method: 'POST' });
     },
@@ -749,3 +1105,4 @@ export function hitHref(hit: SearchHit): string {
 export function hitLabel(hit: SearchHit): string {
     return hit.title ?? hit.name ?? hit.value ?? hit.cveId ?? hit.id;
 }
+
