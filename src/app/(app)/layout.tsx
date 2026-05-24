@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
     LayoutDashboard, Radar, Shield, Users, Database, Workflow,
-    LogOut, ChevronLeft, ChevronRight, ServerCog, UsersRound, UserCircle2, Layers, Play, ScrollText, CalendarClock, Activity, GitFork, BookOpen,
+    LogOut, ChevronLeft, ChevronRight, ServerCog, UsersRound, UserCircle2, Layers, Play, ScrollText, CalendarClock, Activity, GitFork, BookOpen, Network,
 } from 'lucide-react';
 import { SearchPalette } from '@/components/search-palette';
 import { HeaderSearch } from '@/components/header-search';
@@ -32,6 +32,7 @@ const NAV = [
     { href: '/vulnerabilities', label: 'Vulnerabilities', icon: Shield },
     { href: '/actors', label: 'Threat actors', icon: Users },
     { href: '/feeds', label: 'Feeds', icon: Database },
+    { href: '/graph', label: 'Graph', icon: Network },
     { href: '/playbooks', label: 'Playbooks', icon: Workflow },
 ];
 
