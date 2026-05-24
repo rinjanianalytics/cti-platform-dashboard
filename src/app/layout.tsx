@@ -16,7 +16,7 @@ const ibmPlex = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
-    title: 'Rinjani — Threat Intelligence',
+    title: 'Rinjani Analytics — Threat Intelligence',
     description: 'CTI platform: indicators, vulnerabilities, threat actors, automation.',
 };
 

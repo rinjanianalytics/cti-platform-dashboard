@@ -137,7 +137,7 @@ export default function AdminUsersPage() {
         <div className="space-y-6">
             <div className="flex items-end justify-between gap-4 flex-wrap">
                 <div>
-                    <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
+                    <h1 className="text-3xl font-semibold tracking-tight">Users</h1>
                     <p className="text-sm text-muted-foreground mt-1 tabular-nums">
                         {isLoading ? 'Loading…' : `${total.toLocaleString()} user${total === 1 ? '' : 's'}`}
                     </p>

@@ -5,13 +5,92 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/**
+ * Severity → Tailwind class tone map.
+ *
+ * Heat gradient (most → least severe):
+ *   critical = red, high = orange, medium = amber, low = emerald, info/unknown = slate.
+ *
+ * The previous map used blue for medium which broke the perceptual ordering
+ * (medium felt colder than low). Going through the warm-to-cool spectrum so a
+ * row of badges reads at a glance.
+ *
+ * Keys are lowercase. Use `severityTone()` instead of indexing directly —
+ * it handles casing, whitespace, and synonyms.
+ */
 export const SEVERITY_TONE: Record<string, string> = {
     critical: 'bg-red-500/15 text-red-400 border-red-500/30',
-    high: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-    medium: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-    low: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-    info: 'bg-slate-500/15 text-slate-400 border-slate-500/30',
+    high:     'bg-orange-500/15 text-orange-400 border-orange-500/30',
+    medium:   'bg-amber-500/15 text-amber-400 border-amber-500/30',
+    low:      'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+    info:     'bg-slate-500/15 text-slate-400 border-slate-500/30',
+    unknown:  'bg-slate-500/15 text-slate-400 border-slate-500/30',
+    none:     'bg-slate-500/15 text-slate-400 border-slate-500/30',
 };
+
+/** Common synonyms feeds emit; collapsed to the canonical key. */
+const SEVERITY_SYNONYMS: Record<string, string> = {
+    informational: 'info',
+    informative:   'info',
+    severe:        'critical',
+    moderate:      'medium',
+    minor:         'low',
+};
+
+/**
+ * Look up the tone classes for a severity value, tolerant of casing,
+ * whitespace, and the common synonyms feeds emit. Returns the slate
+ * "unknown" tone if the value is null/empty/unrecognised.
+ */
+export function severityTone(s: string | null | undefined): string {
+    if (!s) return SEVERITY_TONE.unknown;
+    const k = s.trim().toLowerCase();
+    const canonical = SEVERITY_SYNONYMS[k] ?? k;
+    return SEVERITY_TONE[canonical] ?? SEVERITY_TONE.unknown;
+}
+
+/**
+ * Text-only colour for a severity — same palette as `severityTone()` minus
+ * background/border. Use for numeric chips, inline values, or anywhere a
+ * full badge would be too heavy.
+ */
+const SEVERITY_TEXT_TONE: Record<string, string> = {
+    critical: 'text-red-400',
+    high:     'text-orange-400',
+    medium:   'text-amber-400',
+    low:      'text-emerald-400',
+    info:     'text-muted-foreground',
+    unknown:  'text-muted-foreground',
+    none:     'text-muted-foreground',
+};
+
+export function severityTextTone(s: string | null | undefined): string {
+    if (!s) return SEVERITY_TEXT_TONE.unknown;
+    const k = s.trim().toLowerCase();
+    const canonical = SEVERITY_SYNONYMS[k] ?? k;
+    return SEVERITY_TEXT_TONE[canonical] ?? SEVERITY_TEXT_TONE.unknown;
+}
+
+/**
+ * Map a CVSS score (v2 or v3) to a canonical severity band.
+ * NVD's bands: 9.0–10 critical · 7.0–8.9 high · 4.0–6.9 medium · 0.1–3.9 low · 0/null none.
+ */
+export function cvssToSeverity(score: number | null | undefined): string {
+    if (score == null || !Number.isFinite(score)) return 'unknown';
+    if (score >= 9)   return 'critical';
+    if (score >= 7)   return 'high';
+    if (score >= 4)   return 'medium';
+    if (score > 0)    return 'low';
+    return 'none';
+}
+
+/**
+ * Convenience: text-only colour for a CVSS score, sharing the severity palette
+ * so the numeric and the severity badge always agree visually.
+ */
+export function cvssTone(score: number | null | undefined): string {
+    return severityTextTone(cvssToSeverity(score));
+}
 
 export function relTime(d: string | null | undefined): string {
     if (!d) return '—';

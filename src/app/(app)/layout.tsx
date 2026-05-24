@@ -7,22 +7,24 @@ import { cn } from '@/lib/utils';
 import {
     SidebarProvider, Sidebar, SidebarContent, SidebarFooter, SidebarHeader,
     SidebarMenu, SidebarMenuButton, SidebarMenuItem,
-    SidebarInset, SidebarGroup, SidebarGroupContent,
+    SidebarInset, SidebarGroup, SidebarGroupContent, SidebarTrigger,
     useSidebar,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
 import {
     DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel,
     DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
     LayoutDashboard, Radar, Shield, Users, Database, Workflow,
-    Bell, LogOut, ChevronLeft, ChevronRight, ServerCog, UsersRound, UserCircle2,
+    LogOut, ChevronLeft, ChevronRight, ServerCog, UsersRound, UserCircle2, Layers, Play, ScrollText, CalendarClock, Activity, GitFork, BookOpen,
 } from 'lucide-react';
 import { SearchPalette } from '@/components/search-palette';
 import { HeaderSearch } from '@/components/header-search';
+import { NotificationBell } from '@/components/notification-bell';
+import { MobileBottomNav } from '@/components/mobile-bottom-nav';
 import { Logo } from '@/components/brand/logo';
+import { BuildBadge } from '@/components/build-badge';
 
 const NAV = [
     { href: '/', label: 'Overview', icon: LayoutDashboard },
@@ -34,9 +36,18 @@ const NAV = [
 ];
 
 // Admin-only entries — rendered as a separate group below the main NAV.
-const ADMIN_NAV = [
-    { href: '/admin/services', label: 'Services', icon: ServerCog },
-    { href: '/admin/users',    label: 'Users',    icon: UsersRound },
+// `roles` lists which user roles see the entry; defaults to admin-only.
+const ADMIN_NAV: Array<{ href: string; label: string; icon: typeof ServerCog; roles?: string[] }> = [
+    { href: '/admin/services',  label: 'Services',  icon: ServerCog },
+    { href: '/admin/runbook',   label: 'Runbook',   icon: BookOpen },
+    { href: '/admin/pipeline',  label: 'Pipeline',  icon: GitFork, roles: ['admin', 'auditor'] },
+    { href: '/admin/feeds',     label: 'Feeds',     icon: Database, roles: ['admin', 'auditor'] },
+    { href: '/admin/activity',  label: 'Activity',  icon: Activity, roles: ['admin', 'auditor'] },
+    { href: '/admin/queues',    label: 'Queues',    icon: Layers },
+    { href: '/admin/jobs',      label: 'Jobs',      icon: Play },
+    { href: '/admin/schedules', label: 'Schedules', icon: CalendarClock },
+    { href: '/admin/audit',     label: 'Audit log', icon: ScrollText, roles: ['admin', 'auditor'] },
+    { href: '/admin/users',     label: 'Users',     icon: UsersRound },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -88,14 +99,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         </SidebarGroupContent>
                     </SidebarGroup>
 
-                    {user.role === 'admin' && (
+                    {(user.role === 'admin' || user.role === 'auditor') && (
                         <SidebarGroup>
                             <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground/70 group-data-[collapsible=icon]:hidden">
                                 Admin
                             </div>
                             <SidebarGroupContent>
                                 <SidebarMenu>
-                                    {ADMIN_NAV.map((item) => (
+                                    {ADMIN_NAV
+                                        .filter(item => (item.roles ?? ['admin']).includes(user.role))
+                                        .map((item) => (
                                         <SidebarMenuItem key={item.href}>
                                             <SidebarMenuButton
                                                 isActive={isActive(item.href)}
@@ -113,26 +126,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     )}
                 </SidebarContent>
                 <SidebarFooter>
-                    <div className="text-[10px] text-muted-foreground px-2 group-data-[collapsible=icon]:hidden">
-                        v304 · CTI
+                    <div className="px-2 group-data-[collapsible=icon]:hidden">
+                        <BuildBadge variant="stacked" />
                     </div>
                 </SidebarFooter>
             </Sidebar>
 
             <SidebarInset>
-                <header className="grid h-12 shrink-0 items-center border-b px-4 grid-cols-[1fr_auto_1fr] gap-3">
-                    {/* Left zone — kept empty so the centered search stays optically centered.
-                        Reserved for future breadcrumbs / context chips. */}
-                    <div />
+                <header className="grid h-12 shrink-0 items-center border-b px-3 sm:px-4 grid-cols-[auto_1fr_auto] sm:grid-cols-[1fr_auto_1fr] gap-2 sm:gap-3">
+                    {/* Left zone — mobile sidebar trigger (sheet drawer); empty
+                        on desktop so the centered search stays optically centered. */}
+                    <div className="flex items-center">
+                        <SidebarTrigger className="md:hidden" />
+                    </div>
 
                     {/* Centered primary affordance */}
                     <HeaderSearch className="w-full max-w-md justify-self-center" />
 
                     {/* Right utilities, grouped */}
                     <div className="flex items-center justify-end gap-1">
-                        <Button size="sm" variant="ghost" className="size-8 p-0">
-                            <Bell className="size-4" />
-                        </Button>
+                        <NotificationBell />
 
                     <DropdownMenu>
                         <DropdownMenuTrigger
@@ -177,11 +190,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     </div>
                 </header>
 
-                <main className="flex-1 overflow-auto p-6">
+                <main className="flex-1 overflow-auto p-4 sm:p-6 pb-20 md:pb-6">
                     {children}
                 </main>
             </SidebarInset>
 
+            <MobileBottomNav />
             <SearchPalette />
         </SidebarProvider>
     );
