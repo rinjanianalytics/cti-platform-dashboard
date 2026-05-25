@@ -13,6 +13,7 @@ import { ArrowLeft, ShieldAlert, ExternalLink, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, severityTone, cvssTone, relTime } from '@/lib/utils';
 import { SimilarPanel } from '@/components/similar-panel';
+import { EntityDescription } from '@/components/entity-description';
 
 export default function VulnerabilityDetailPage({ params }: { params: Promise<{ cveId: string }> }) {
     const { cveId } = use(params);
@@ -124,9 +125,7 @@ export default function VulnerabilityDetailPage({ params }: { params: Promise<{ 
                         <CardTitle className="text-base">Description</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-sm leading-relaxed">
-                            {vuln.description ?? <span className="text-muted-foreground">No description available.</span>}
-                        </p>
+                        <EntityDescription text={vuln.description} />
                     </CardContent>
                 </Card>
 

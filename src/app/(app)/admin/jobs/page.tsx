@@ -12,6 +12,8 @@ import {
 } from '@/components/ui/dialog';
 import { cn, relTime } from '@/lib/utils';
 import { toast } from 'sonner';
+import { PageHeader } from '@/components/admin/page-header';
+import { StatusBadge, borderLeftTone, type StatusKind } from '@/lib/tone';
 import {
     ShieldAlert, Database, Network, Brain, AlertTriangle, Play, Loader2, Clock, Radar,
 } from 'lucide-react';
@@ -150,6 +152,11 @@ const COST_TONE: Record<JobCard['cost'], string> = {
     heavy:  'bg-red-500/15 text-red-400 border-red-500/30',
 };
 
+/** Map a JobRecord status to the shared StatusKind tone vocabulary. */
+function jobToneFor(status: JobRecord['status']): StatusKind {
+    return status === 'success' ? 'success' : status === 'error' ? 'failed' : 'active';
+}
+
 export default function AdminJobsPage() {
     const { user, isLoading: authLoading } = useAuth();
     const router = useRouter();
@@ -209,12 +216,10 @@ export default function AdminJobsPage() {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-semibold tracking-tight">Job runner</h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                    One-click bulk operations. Use for incident response and back-fills — not as a substitute for scheduled jobs.
-                </p>
-            </div>
+            <PageHeader
+                title="Job runner"
+                description="One-click bulk operations. Use for incident response and back-fills — not as a substitute for scheduled jobs."
+            />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {JOBS.map((card) => {
@@ -268,28 +273,36 @@ export default function AdminJobsPage() {
             </div>
 
             {history.length > 0 && (
-                <div>
-                    <h2 className="text-sm font-medium mb-2 text-muted-foreground">Recent runs</h2>
-                    <div className="space-y-1">
-                        {history.map((h, i) => (
-                            <div key={i} className="flex items-center gap-3 text-xs py-2 px-3 rounded-md bg-card border tabular-nums">
-                                <Badge variant="outline" className={cn(
-                                    'font-mono text-[10px] uppercase',
-                                    h.status === 'success' && 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-                                    h.status === 'error' && 'bg-red-500/15 text-red-400 border-red-500/30',
-                                    h.status === 'running' && 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-                                )}>
-                                    {h.status}
-                                </Badge>
-                                <span className="font-mono text-[11px]">{h.kind}</span>
-                                <span className="text-muted-foreground">{relTime(h.startedAt)}</span>
-                                <span className="text-muted-foreground/70 truncate flex-1">
-                                    {h.summary || h.error || ''}
-                                </span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                            <Clock className="size-4 text-muted-foreground" /> Recent runs
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-0">
+                        <div className="divide-y divide-border/40">
+                            {history.map((h, i) => {
+                                const tone = jobToneFor(h.status);
+                                return (
+                                    <div
+                                        key={i}
+                                        className={cn(
+                                            'flex items-center gap-3 text-xs py-2 px-4 tabular-nums border-l-2',
+                                            borderLeftTone(tone),
+                                        )}
+                                    >
+                                        <StatusBadge kind={tone}>{h.status}</StatusBadge>
+                                        <span className="font-mono text-[11px]">{h.kind}</span>
+                                        <span className="text-muted-foreground/80">{relTime(h.startedAt)}</span>
+                                        <span className="text-muted-foreground/70 truncate flex-1">
+                                            {h.summary || h.error || ''}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </CardContent>
+                </Card>
             )}
 
             <Dialog open={!!confirmJob} onOpenChange={() => setConfirmKind(null)}>

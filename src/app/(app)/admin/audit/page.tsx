@@ -15,6 +15,7 @@ import {
 import { EmptyState } from '@/components/ui/empty-state';
 import { ScrollText, Filter, X, RefreshCw } from 'lucide-react';
 import { cn, relTime } from '@/lib/utils';
+import { PageHeader, RefreshAction } from '@/components/admin/page-header';
 
 const PAGE_SIZE = 50;
 
@@ -92,19 +93,13 @@ export default function AdminAuditPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-end justify-between gap-4 flex-wrap">
-                <div>
-                    <h1 className="text-3xl font-semibold tracking-tight">Audit log</h1>
-                    <p className="text-sm text-muted-foreground mt-1 tabular-nums">
-                        {isLoading
-                            ? 'Loading…'
-                            : `${total.toLocaleString()} entr${total === 1 ? 'y' : 'ies'}${stats ? ` · ${stats.total.toLocaleString()} in the last ${stats.days} days` : ''}`}
-                    </p>
-                </div>
-                <Button size="sm" variant="ghost" onClick={() => mutate()}>
-                    <RefreshCw className="size-3.5" /> Refresh
-                </Button>
-            </div>
+            <PageHeader
+                title="Audit log"
+                description={isLoading
+                    ? 'Loading…'
+                    : `${total.toLocaleString()} entr${total === 1 ? 'y' : 'ies'}${stats ? ` · ${stats.total.toLocaleString()} in the last ${stats.days} days` : ''}`}
+                actions={<RefreshAction onClick={() => mutate()} />}
+            />
 
             <Card>
                 <CardContent className="py-3 space-y-3">
