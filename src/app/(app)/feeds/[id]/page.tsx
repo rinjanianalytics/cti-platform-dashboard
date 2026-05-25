@@ -14,6 +14,7 @@ import { ArrowLeft } from 'lucide-react';
 import { relTime } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { SimilarPanel } from '@/components/similar-panel';
+import { EntityDescription } from '@/components/entity-description';
 
 const TLP_TONE: Record<string, string> = {
     red: 'bg-red-500/15 text-red-400 border-red-500/30',
@@ -84,9 +85,7 @@ export default function FeedDetailPage({ params }: { params: Promise<{ id: strin
                         <CardTitle className="text-base">Description</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                            {pulse.description || <span className="text-muted-foreground">No description.</span>}
-                        </p>
+                        <EntityDescription text={pulse.description} emptyText="No description." />
                     </CardContent>
                 </Card>
 
@@ -129,9 +128,9 @@ export default function FeedDetailPage({ params }: { params: Promise<{ id: strin
                         <Table>
                             <TableHeader>
                                 <TableRow className="bg-muted/40 hover:bg-muted/40">
-                                    <TableHead className="w-[80px]">Type</TableHead>
+                                    <TableHead className="w-20">Type</TableHead>
                                     <TableHead>Value</TableHead>
-                                    <TableHead className="w-[110px]">Severity</TableHead>
+                                    <TableHead className="w-28">Severity</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -153,7 +152,7 @@ function IocRow({ ioc }: { ioc: { id: string; type: string; value: string; sever
             onClick={() => router.push(`/iocs/${ioc.id}`)}
         >
             <TableCell className="text-xs text-muted-foreground uppercase tracking-wider">{ioc.type}</TableCell>
-            <TableCell className="font-mono text-sm truncate max-w-[480px]">{ioc.value}</TableCell>
+            <TableCell className="font-mono text-sm truncate max-w-120">{ioc.value}</TableCell>
             <TableCell>
                 {ioc.severity ? (
                     <Badge variant="outline" className="font-mono text-[10px] uppercase">{ioc.severity}</Badge>
