@@ -68,7 +68,7 @@ export default function OverviewPage() {
                     sub={landscape ? `${fmt(landscape.vulnerabilities.high)} high · ${fmt(landscape.vulnerabilities.critical)} crit` : undefined} />
                 <KpiCell label="Threat actors" value={fmt(counts?.threatActors)} href="/actors"
                     sub={actors ? `${actors.actors.length} active this week` : undefined} />
-                <KpiCell label="Active feeds" value={fmt(feedList.length || counts?.pulses)} href="/feeds"
+                <KpiCell label="Active feeds" value={feedList.length > 0 ? fmt(feedList.length) : '—'} href="/feeds"
                     sub={feedList.length > 0 ? `${feedList.filter(f => f.health === 'healthy').length} healthy` : undefined} />
             </div>
 
@@ -162,7 +162,7 @@ export default function OverviewPage() {
                     )}
                 </Panel>
 
-                <Panel title="Threat actor watchlist" subtitle={actors ? `${actors.actors.length} updated recently` : undefined}>
+                <Panel title="Threat actor watchlist" subtitle={actors ? `${actors.actors.length} ranked by activity score` : undefined}>
                     {!actors ? (
                         <SkeletonRows count={6} />
                     ) : actors.actors.length === 0 ? (
@@ -173,7 +173,8 @@ export default function OverviewPage() {
                                 <Link
                                     key={a.id}
                                     href={`/actors/${a.id}`}
-                                    className="grid grid-cols-[1fr_42px_72px] gap-2 items-center px-3 py-1.5 hover:bg-accent/50 transition-colors"
+                                    title={`Activity score ${a.score} = pulses ${a.breakdown.pulses}×3 + ttps ${a.breakdown.ttps}×2 + sophistication ${a.breakdown.sophistication} + recency ${a.breakdown.recency}`}
+                                    className="grid grid-cols-[1fr_36px_24px_72px] gap-2 items-center px-3 py-1.5 hover:bg-accent/50 transition-colors"
                                 >
                                     <div className="min-w-0">
                                         <div className="text-[12px] font-medium truncate">{a.name}</div>
@@ -185,6 +186,9 @@ export default function OverviewPage() {
                                     </div>
                                     <span className="text-[10px] font-mono text-muted-foreground">
                                         {a.country ? a.country.slice(0, 3).toUpperCase() : '—'}
+                                    </span>
+                                    <span className="text-[11px] font-mono tabular-nums text-right text-muted-foreground/90" aria-label="activity score">
+                                        {a.score}
                                     </span>
                                     <Badge variant="outline" className="text-[9px] capitalize justify-self-end">
                                         {a.sophistication ?? '—'}
@@ -221,7 +225,7 @@ export default function OverviewPage() {
                     {feedList.length === 0 ? (
                         <SkeletonRows count={6} />
                     ) : (
-                        <div className="divide-y motion-enter -mx-3 max-h-[260px] overflow-y-auto">
+                        <div className="divide-y motion-enter -mx-3 max-h-65 overflow-y-auto">
                             {feedList.map(f => <FeedRow key={f.feed} feed={f} />)}
                         </div>
                     )}
@@ -293,10 +297,14 @@ function BarRow({
 }
 
 function FeedRow({ feed: f }: { feed: { feed: string; health: string; status: string; lastSync: string | null; itemsProcessed: number; successRate: number } }) {
-    const HealthIcon = f.health === 'healthy' ? CheckCircle2 : f.health === 'error' ? AlertCircle : MinusCircle;
+    // Backend (/v1/monitoring/feeds) emits 'healthy' | 'warning' | 'critical'.
+    // Previously the dashboard checked for 'error', which never matched, so
+    // critical feeds rendered amber (warning) instead of red.
+    const isCritical = f.health === 'critical' || f.health === 'error';
+    const HealthIcon = f.health === 'healthy' ? CheckCircle2 : isCritical ? AlertCircle : MinusCircle;
     const tone =
         f.health === 'healthy' ? 'text-emerald-500'
-        : f.health === 'error' ? 'text-red-500'
+        : isCritical ? 'text-red-500'
         : 'text-amber-500';
     return (
         <div className="grid grid-cols-[16px_1fr_70px_64px] gap-3 items-center px-3 py-1.5 text-[12px]">
