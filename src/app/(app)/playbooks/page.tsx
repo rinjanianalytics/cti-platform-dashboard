@@ -111,7 +111,16 @@ function PlaybookCard({ pb, onChange }: { pb: Playbook; onChange: () => void }) 
         setBusy(true);
         try {
             const result = await playbooks.execute(pb.id, {});
-            toast.success('Execution started', { description: `Status: ${result.status}` });
+            // Execution is synchronous on the server — the returned row already
+            // carries the final status. Surface failures as toast.error so the
+            // analyst doesn't read a green "started" message for a failed run.
+            if (result.status === 'failed') {
+                toast.error('Playbook execution failed', {
+                    description: result.error ?? 'No error message',
+                });
+            } else {
+                toast.success('Playbook executed', { description: `Status: ${result.status}` });
+            }
             onChange();
         } catch (err) {
             toast.error('Execute failed', { description: (err as Error).message });
