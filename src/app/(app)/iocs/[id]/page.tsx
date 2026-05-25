@@ -21,6 +21,7 @@ import { ArrowLeft, ShieldOff, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, severityTone, relTime } from '@/lib/utils';
 import { SimilarPanel } from '@/components/similar-panel';
+import { EntityDescription } from '@/components/entity-description';
 
 const VERDICTS = ['malicious', 'suspicious', 'benign', 'unknown'] as const;
 
@@ -47,7 +48,10 @@ export default function IOCDetailPage({ params }: { params: Promise<{ id: string
     }
 
     const ioc = data;
-    const tags = ioc.tags ?? [];
+    // Dedupe — multiple feeds can attach the same tag (e.g. "elf" from
+    // both URLhaus and MalwareBazaar). Without dedup, the .map below
+    // throws React's duplicate-key warning and renders extra badges.
+    const tags = Array.from(new Set(ioc.tags ?? []));
 
     return (
         <div className="space-y-6">
@@ -87,7 +91,7 @@ export default function IOCDetailPage({ params }: { params: Promise<{ id: string
                     </CardHeader>
                     <CardContent className="space-y-3 text-sm">
                         {ioc.description && (
-                            <p className="text-muted-foreground">{ioc.description}</p>
+                            <EntityDescription text={ioc.description} className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap" />
                         )}
                         <FieldRow label="Threat type" value={ioc.threatType ?? '—'} />
                         <FieldRow label="Confidence" value={ioc.confidence != null ? `${ioc.confidence}%` : '—'} />

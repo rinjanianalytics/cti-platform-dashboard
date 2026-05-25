@@ -13,6 +13,7 @@ import { ArrowLeft, ExternalLink, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { relTime } from '@/lib/utils';
 import { SimilarPanel } from '@/components/similar-panel';
+import { EntityDescription } from '@/components/entity-description';
 
 const SOPH_TONE: Record<string, string> = {
     strategic: 'bg-red-500/15 text-red-400 border-red-500/30',
@@ -125,9 +126,7 @@ export default function ActorDetailPage({ params }: { params: Promise<{ id: stri
                         <CardTitle className="text-base">Profile</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                            {actor.description || <span className="text-muted-foreground">No description available.</span>}
-                        </p>
+                        <EntityDescription text={actor.description} />
                     </CardContent>
                 </Card>
 
@@ -153,7 +152,11 @@ export default function ActorDetailPage({ params }: { params: Promise<{ id: stri
                                 </div>
                             )
                         } />
-                        <FieldRow label="Updated" value={actor.updatedAt ? relTime(actor.updatedAt) : '—'} />
+                        <FieldRow label="First seen" value={actor.firstSeen ? relTime(actor.firstSeen) : '—'} />
+                        <FieldRow label="Last seen" value={(() => {
+                            const ts = actor.lastSeen ?? actor.stixModified;
+                            return ts ? relTime(ts) : '—';
+                        })()} />
                     </CardContent>
                 </Card>
             </div>
@@ -179,7 +182,10 @@ export default function ActorDetailPage({ params }: { params: Promise<{ id: stri
                                         <span className="font-medium">{r.source_name ?? '—'}</span>
                                     )}
                                     {r.description && (
-                                        <div className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{r.description}</div>
+                                        <EntityDescription
+                                            text={r.description}
+                                            className="text-xs text-muted-foreground mt-0.5 line-clamp-2"
+                                        />
                                     )}
                                 </li>
                             ))}

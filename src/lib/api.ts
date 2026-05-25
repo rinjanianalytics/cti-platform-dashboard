@@ -751,6 +751,16 @@ export const platform = {
             aliases: string[]; country: string | null; sophistication: string | null;
             primaryMotivation: string | null;
             firstSeen: string | null; lastSeen: string | null; updatedAt: string | null;
+            /** Composite activity score (see backend route for the formula). */
+            score: number;
+            /** Per-signal contribution to `score`, surfaced so the dashboard can
+             *  show "why this scored high" on hover. */
+            breakdown: {
+                pulses: number;          // OTX pulse mentions in last 7d
+                ttps: number;            // TTP relationship rows in last 30d
+                sophistication: number;  // 0–3 by tier
+                recency: number;         // 0 or 2 (last_seen within 7d)
+            };
         }>;
     }> {
         return request(`/v1/actors/active?limit=${limit}`);
@@ -875,6 +885,18 @@ export interface ThreatActor {
     goals: string[] | null;
     labels: string[] | null;
     confidence: number | null;
+    country: string | null;
+    /** When the upstream source first observed this actor. */
+    firstSeen: string | null;
+    /** When the upstream source last observed activity. This is the
+     *  canonical "freshness" signal for analysts — use this, not
+     *  `updatedAt`, when displaying recency on actor lists. */
+    lastSeen: string | null;
+    /** When the upstream STIX record was last edited (separate from
+     *  observed activity). Useful fallback when `lastSeen` is null. */
+    stixModified: string | null;
+    /** When our DB row was last written by the scheduler/sync. Internal
+     *  — do not display as a freshness indicator. */
     createdAt: string | null;
     updatedAt: string | null;
 }
@@ -1112,4 +1134,67 @@ export function hitHref(hit: SearchHit): string {
 export function hitLabel(hit: SearchHit): string {
     return hit.title ?? hit.name ?? hit.value ?? hit.cveId ?? hit.id;
 }
+
+/* ---------------------------------------------------------------------- */
+/* Graph exploration (Neo4j)                                              */
+/* ---------------------------------------------------------------------- */
+
+export interface GraphNode {
+    id: string;
+    label: string;
+    type: string;
+    properties: Record<string, unknown>;
+}
+
+export interface GraphEdge {
+    source: string;
+    target: string;
+    type: string;
+    properties: Record<string, unknown>;
+}
+
+export interface GraphResult {
+    nodes: GraphNode[];
+    edges: GraphEdge[];
+    meta?: Record<string, unknown>;
+}
+
+// Graph endpoints live at /v2/graph (see apps/api/src/routes/v2.ts:26).
+// There's an older /v1/graph/neo4j/* set with the same shape, but v2 is the
+// canonical surface: full mode set, no `neo4j` infix, easier to reason about.
+//
+// `request<T>()` already unwraps the `{ success, data }` envelope (see the
+// auto-unwrap at line ~121 above) and returns the inner `data` directly.
+// Earlier this file double-wrapped with a `GraphEnvelope` type then
+// re-accessed `.data` — every call returned undefined, and the graph
+// page rendered nothing (no data, no loading, no error) because SWR
+// resolved with `data: undefined`.
+const GRAPH_BASE = '/v2/graph';
+
+export const graphApi = {
+    /** IOC → Pulse → Actor → related IOCs. Pass the raw IOC value. */
+    iocPivot(value: string, limit = 50): Promise<GraphResult> {
+        return request<GraphResult>(
+            `${GRAPH_BASE}/ioc-pivot/${encodeURIComponent(value)}?limit=${limit}`,
+        );
+    },
+    /** Actor → Techniques → Tactics (MITRE chain). Pass the actor name. */
+    attackTree(actor: string): Promise<GraphResult> {
+        return request<GraphResult>(
+            `${GRAPH_BASE}/attack-tree/${encodeURIComponent(actor)}`,
+        );
+    },
+    /** N-hop neighborhood of any node. Pass the Neo4j-side node id (UUID or canonical key). */
+    expand(id: string, depth = 1, limit = 50): Promise<GraphResult> {
+        return request<GraphResult>(
+            `${GRAPH_BASE}/expand/${encodeURIComponent(id)}?depth=${depth}&limit=${limit}`,
+        );
+    },
+    /** Actors sharing >= `minShared` techniques with the named actor. */
+    relatedActors(actor: string, minShared = 1): Promise<GraphResult> {
+        return request<GraphResult>(
+            `${GRAPH_BASE}/related-actors/${encodeURIComponent(actor)}?minShared=${minShared}`,
+        );
+    },
+};
 
