@@ -36,19 +36,37 @@ const NAV = [
     { href: '/playbooks', label: 'Playbooks', icon: Workflow },
 ];
 
-// Admin-only entries — rendered as a separate group below the main NAV.
+// Admin entries grouped by purpose. Ten flat items broke the cognitive-load
+// ceiling (≤5 per nav group); grouped into Operations / Configuration /
+// Governance the sidebar reads as three small lists instead of one wall.
 // `roles` lists which user roles see the entry; defaults to admin-only.
-const ADMIN_NAV: Array<{ href: string; label: string; icon: typeof ServerCog; roles?: string[] }> = [
-    { href: '/admin/services',  label: 'Services',  icon: ServerCog },
-    { href: '/admin/runbook',   label: 'Runbook',   icon: BookOpen },
-    { href: '/admin/pipeline',  label: 'Pipeline',  icon: GitFork, roles: ['admin', 'auditor'] },
-    { href: '/admin/feeds',     label: 'Feeds',     icon: Database, roles: ['admin', 'auditor'] },
-    { href: '/admin/activity',  label: 'Activity',  icon: Activity, roles: ['admin', 'auditor'] },
-    { href: '/admin/queues',    label: 'Queues',    icon: Layers },
-    { href: '/admin/jobs',      label: 'Jobs',      icon: Play },
-    { href: '/admin/schedules', label: 'Schedules', icon: CalendarClock },
-    { href: '/admin/audit',     label: 'Audit log', icon: ScrollText, roles: ['admin', 'auditor'] },
-    { href: '/admin/users',     label: 'Users',     icon: UsersRound },
+type AdminNavItem = { href: string; label: string; icon: typeof ServerCog; roles?: string[] };
+const ADMIN_NAV_GROUPS: Array<{ heading: string; items: AdminNavItem[] }> = [
+    {
+        heading: 'Operations',
+        items: [
+            { href: '/admin/services', label: 'Services', icon: ServerCog },
+            { href: '/admin/runbook',  label: 'Runbook',  icon: BookOpen },
+            { href: '/admin/activity', label: 'Activity', icon: Activity, roles: ['admin', 'auditor'] },
+            { href: '/admin/pipeline', label: 'Pipeline', icon: GitFork,  roles: ['admin', 'auditor'] },
+        ],
+    },
+    {
+        heading: 'Configuration',
+        items: [
+            { href: '/admin/feeds',     label: 'Feeds',     icon: Database, roles: ['admin', 'auditor'] },
+            { href: '/admin/schedules', label: 'Schedules', icon: CalendarClock },
+            { href: '/admin/jobs',      label: 'Jobs',      icon: Play },
+            { href: '/admin/queues',    label: 'Queues',    icon: Layers },
+        ],
+    },
+    {
+        heading: 'Governance',
+        items: [
+            { href: '/admin/users', label: 'Users',     icon: UsersRound },
+            { href: '/admin/audit', label: 'Audit log', icon: ScrollText, roles: ['admin', 'auditor'] },
+        ],
+    },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -100,31 +118,33 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         </SidebarGroupContent>
                     </SidebarGroup>
 
-                    {(user.role === 'admin' || user.role === 'auditor') && (
-                        <SidebarGroup>
-                            <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground/70 group-data-[collapsible=icon]:hidden">
-                                Admin
-                            </div>
-                            <SidebarGroupContent>
-                                <SidebarMenu>
-                                    {ADMIN_NAV
-                                        .filter(item => (item.roles ?? ['admin']).includes(user.role))
-                                        .map((item) => (
-                                        <SidebarMenuItem key={item.href}>
-                                            <SidebarMenuButton
-                                                isActive={isActive(item.href)}
-                                                tooltip={item.label}
-                                                render={<Link href={item.href} />}
-                                            >
-                                                <item.icon />
-                                                <span>{item.label}</span>
-                                            </SidebarMenuButton>
-                                        </SidebarMenuItem>
-                                    ))}
-                                </SidebarMenu>
-                            </SidebarGroupContent>
-                        </SidebarGroup>
-                    )}
+                    {(user.role === 'admin' || user.role === 'auditor') && ADMIN_NAV_GROUPS.map((group) => {
+                        const visible = group.items.filter(item => (item.roles ?? ['admin']).includes(user.role));
+                        if (visible.length === 0) return null;
+                        return (
+                            <SidebarGroup key={group.heading}>
+                                <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-muted-foreground/70 group-data-[collapsible=icon]:hidden">
+                                    {group.heading}
+                                </div>
+                                <SidebarGroupContent>
+                                    <SidebarMenu>
+                                        {visible.map((item) => (
+                                            <SidebarMenuItem key={item.href}>
+                                                <SidebarMenuButton
+                                                    isActive={isActive(item.href)}
+                                                    tooltip={item.label}
+                                                    render={<Link href={item.href} />}
+                                                >
+                                                    <item.icon />
+                                                    <span>{item.label}</span>
+                                                </SidebarMenuButton>
+                                            </SidebarMenuItem>
+                                        ))}
+                                    </SidebarMenu>
+                                </SidebarGroupContent>
+                            </SidebarGroup>
+                        );
+                    })}
                 </SidebarContent>
                 <SidebarFooter>
                     <div className="px-2 group-data-[collapsible=icon]:hidden">

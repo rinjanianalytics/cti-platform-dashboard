@@ -16,6 +16,7 @@ import {
     Download, Sparkles, Database, Network, Bell, RefreshCw, ChevronRight,
 } from 'lucide-react';
 import { cn, relTime } from '@/lib/utils';
+import { PageHeader, RefreshAction } from '@/components/admin/page-header';
 
 /**
  * Pipeline visualization — the CTI ingestion DAG, read-only.
@@ -160,24 +161,20 @@ export default function AdminPipelinePage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-end justify-between gap-4 flex-wrap">
-                <div>
-                    <h1 className="text-3xl font-semibold tracking-tight">Pipeline</h1>
-                    <p className="text-sm text-muted-foreground mt-1">
-                        Read-only view of the CTI ingestion DAG.{' '}
-                        {isLoading
-                            ? 'Loading…'
-                            : overallActive > 0
-                                ? `${overallActive} job${overallActive === 1 ? '' : 's'} running.`
-                                : overallFailing > 0
-                                    ? `${overallFailing} stage${overallFailing === 1 ? '' : 's'} need attention.`
-                                    : 'All stages healthy.'}
-                    </p>
-                </div>
-                <Button size="sm" variant="ghost" onClick={() => mutate()}>
-                    <RefreshCw className="size-3.5" /> Refresh
-                </Button>
-            </div>
+            <PageHeader
+                title="Pipeline"
+                description={<>
+                    Read-only view of the CTI ingestion DAG.{' '}
+                    {isLoading
+                        ? 'Loading…'
+                        : overallActive > 0
+                            ? `${overallActive} job${overallActive === 1 ? '' : 's'} running.`
+                            : overallFailing > 0
+                                ? `${overallFailing} stage${overallFailing === 1 ? '' : 's'} need attention.`
+                                : 'All stages healthy.'}
+                </>}
+                actions={<RefreshAction onClick={() => mutate()} />}
+            />
 
             {/* Horizontal pipeline — flex layout with explicit arrow separators.
                 On narrow screens it stacks vertically so the arrows rotate down

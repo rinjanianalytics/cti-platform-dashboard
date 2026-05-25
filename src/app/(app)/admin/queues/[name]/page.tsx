@@ -14,6 +14,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { ArrowLeft, RotateCcw, Trash2, RefreshCw, Inbox, Zap } from 'lucide-react';
 import { cn, relTime } from '@/lib/utils';
 import { toast } from 'sonner';
+import { StatusBadge } from '@/lib/tone';
 
 const STATES: QueueJobState[] = ['waiting', 'active', 'failed', 'completed', 'delayed'];
 const PAGE_SIZE = 50;
@@ -167,9 +168,9 @@ function JobRow({
                             <span className="text-sm font-mono truncate">{job.name || '(anon)'}</span>
                             <Badge variant="outline" className="font-mono text-[10px]">#{job.id}</Badge>
                             {job.attemptsMade > 0 && (
-                                <Badge variant="outline" className="font-mono text-[10px] bg-amber-500/15 text-amber-400 border-amber-500/30">
+                                <StatusBadge kind="paused">
                                     {job.attemptsMade} attempt{job.attemptsMade > 1 ? 's' : ''}
-                                </Badge>
+                                </StatusBadge>
                             )}
                         </div>
                         <div className="text-[11px] text-muted-foreground tabular-nums mt-0.5">
