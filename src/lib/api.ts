@@ -751,6 +751,16 @@ export const platform = {
             aliases: string[]; country: string | null; sophistication: string | null;
             primaryMotivation: string | null;
             firstSeen: string | null; lastSeen: string | null; updatedAt: string | null;
+            /** Composite activity score (see backend route for the formula). */
+            score: number;
+            /** Per-signal contribution to `score`, surfaced so the dashboard can
+             *  show "why this scored high" on hover. */
+            breakdown: {
+                pulses: number;          // OTX pulse mentions in last 7d
+                ttps: number;            // TTP relationship rows in last 30d
+                sophistication: number;  // 0–3 by tier
+                recency: number;         // 0 or 2 (last_seen within 7d)
+            };
         }>;
     }> {
         return request(`/v1/actors/active?limit=${limit}`);
@@ -875,6 +885,18 @@ export interface ThreatActor {
     goals: string[] | null;
     labels: string[] | null;
     confidence: number | null;
+    country: string | null;
+    /** When the upstream source first observed this actor. */
+    firstSeen: string | null;
+    /** When the upstream source last observed activity. This is the
+     *  canonical "freshness" signal for analysts — use this, not
+     *  `updatedAt`, when displaying recency on actor lists. */
+    lastSeen: string | null;
+    /** When the upstream STIX record was last edited (separate from
+     *  observed activity). Useful fallback when `lastSeen` is null. */
+    stixModified: string | null;
+    /** When our DB row was last written by the scheduler/sync. Internal
+     *  — do not display as a freshness indicator. */
     createdAt: string | null;
     updatedAt: string | null;
 }

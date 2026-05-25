@@ -10,7 +10,6 @@ import {
     type IntervalPreset,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -19,10 +18,15 @@ import {
 } from '@/components/ui/select';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
-    Database, Play, Loader2, RefreshCw, CheckCircle2, XCircle, ChevronDown, ChevronRight, Clock,
+    Database, Play, Loader2, CheckCircle2, XCircle, Clock,
 } from 'lucide-react';
 import { cn, relTime } from '@/lib/utils';
 import { toast } from 'sonner';
+import { PageHeader, RefreshAction } from '@/components/admin/page-header';
+import { RowCard } from '@/components/admin/row-card';
+import { StatField } from '@/components/admin/stat';
+import { CardExpandFooter } from '@/components/admin/card-expand-footer';
+import { StatusBadge, type StatusKind } from '@/lib/tone';
 
 const REFRESH_MS = 30_000;
 const HISTORY_LIMIT = 20;
@@ -96,19 +100,13 @@ export default function AdminFeedsPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-end justify-between gap-4 flex-wrap">
-                <div>
-                    <h1 className="text-3xl font-semibold tracking-tight">Feeds</h1>
-                    <p className="text-sm text-muted-foreground mt-1 tabular-nums">
-                        {isLoading
-                            ? 'Loading…'
-                            : `${enabledCount}/${feeds.length} active · ${ingestedRecent.toLocaleString()} items in last runs${erroringCount > 0 ? ` · ${erroringCount} failing` : ''}`}
-                    </p>
-                </div>
-                <Button size="sm" variant="ghost" onClick={() => mutate()}>
-                    <RefreshCw className="size-3.5" /> Refresh
-                </Button>
-            </div>
+            <PageHeader
+                title="Feeds"
+                description={isLoading
+                    ? 'Loading…'
+                    : `${enabledCount}/${feeds.length} active · ${ingestedRecent.toLocaleString()} items in last runs${erroringCount > 0 ? ` · ${erroringCount} failing` : ''}`}
+                actions={<RefreshAction onClick={() => mutate()} />}
+            />
 
             {isLoading && (
                 <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">Loading feeds…</CardContent></Card>
@@ -146,7 +144,6 @@ function FeedRow({
 }: { feed: FeedScheduleEntry; onChanged: () => void }) {
     const [busy, setBusy] = useState(false);
     const [running, setRunning] = useState(false);
-    const [expanded, setExpanded] = useState(false);
 
     const update = async (patch: { enabled?: boolean; intervalPreset?: IntervalPreset | null }) => {
         setBusy(true);
@@ -182,34 +179,24 @@ function FeedRow({
     const lastFailing = last?.status === 'failed';
     const isCustomised = feed.override !== null;
     const presetValue: IntervalPreset | 'default' = feed.override?.intervalPreset ?? 'default';
+    const tone: StatusKind | undefined =
+        !feed.enabled     ? 'paused'
+      : lastFailing       ? 'failed'
+      : isCustomised      ? 'custom'
+      : undefined;
 
     return (
-        <Card className={cn(
-            'transition-colors',
-            !feed.enabled && 'opacity-60 border-l-2 border-l-amber-500/40',
-            feed.enabled && lastFailing && 'border-l-2 border-l-red-500/50',
-            feed.enabled && !lastFailing && isCustomised && 'border-l-2 border-l-brand/40',
-        )}>
+        <RowCard tone={tone} muted={!feed.enabled}>
             <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div className="min-w-0 flex-1">
                         <CardTitle className="text-base flex items-center gap-2 flex-wrap">
                             <Database className="size-4 text-muted-foreground" />
                             <span className="font-mono">{feed.source}</span>
-                            {!feed.enabled && (
-                                <Badge variant="outline" className="font-mono text-[10px] uppercase bg-amber-500/15 text-amber-400 border-amber-500/30">
-                                    Paused
-                                </Badge>
-                            )}
-                            {feed.enabled && lastFailing && (
-                                <Badge variant="outline" className="font-mono text-[10px] uppercase bg-red-500/15 text-red-400 border-red-500/30">
-                                    Last run failed
-                                </Badge>
-                            )}
+                            {!feed.enabled && <StatusBadge kind="paused">Paused</StatusBadge>}
+                            {feed.enabled && lastFailing && <StatusBadge kind="failed">Last run failed</StatusBadge>}
                             {feed.enabled && isCustomised && !lastFailing && (
-                                <Badge variant="outline" className="font-mono text-[10px] uppercase bg-brand/15 text-brand border-brand/30">
-                                    Customised
-                                </Badge>
+                                <StatusBadge kind="custom">Customised</StatusBadge>
                             )}
                         </CardTitle>
                         <CardDescription className="text-xs mt-1">{feed.description}</CardDescription>
@@ -231,11 +218,7 @@ function FeedRow({
             </CardHeader>
             <CardContent className="pt-0 pb-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {/* Interval preset */}
-                    <div className="space-y-1.5">
-                        <label className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-                            Interval
-                        </label>
+                    <StatField label="Interval">
                         <Select
                             value={presetValue}
                             onValueChange={(v) => {
@@ -244,7 +227,7 @@ function FeedRow({
                             }}
                             disabled={busy || !feed.enabled}
                         >
-                            <SelectTrigger className="h-9 text-xs">
+                            <SelectTrigger className="h-9 text-xs w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -256,14 +239,10 @@ function FeedRow({
                                 ))}
                             </SelectContent>
                         </Select>
-                    </div>
+                    </StatField>
 
-                    {/* Last run summary */}
-                    <div className="space-y-1.5 sm:col-span-2">
-                        <label className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-                            Last run
-                        </label>
-                        <div className="h-9 inline-flex items-center gap-2 text-xs">
+                    <StatField label="Last run" className="sm:col-span-2">
+                        <div className="inline-flex items-center gap-2 text-xs flex-wrap">
                             {last ? (
                                 <>
                                     {last.status === 'completed'
@@ -298,28 +277,17 @@ function FeedRow({
                                 </>
                             )}
                         </div>
-                    </div>
+                    </StatField>
                 </div>
 
-                {/* Footer micro-row + history expand */}
-                <div className="flex items-center justify-between text-[10px] text-muted-foreground/70 font-mono tabular-nums pt-2 mt-2 border-t border-border/50">
-                    <span>
-                        active: <span className="text-muted-foreground">{describeCron(feed.effectiveCron)}</span>
-                    </span>
-                    <button
-                        type="button"
-                        onClick={() => setExpanded(e => !e)}
-                        className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
-                    >
-                        {expanded
-                            ? <><ChevronDown className="size-3" /> Hide history</>
-                            : <><ChevronRight className="size-3" /> Show history</>}
-                    </button>
-                </div>
-
-                {expanded && <HistoryPanel feedSource={feed.source} />}
+                <CardExpandFooter
+                    meta={<>active: <span className="text-muted-foreground">{describeCron(feed.effectiveCron)}</span></>}
+                    expandLabel="Show history"
+                >
+                    {() => <HistoryPanel feedSource={feed.source} />}
+                </CardExpandFooter>
             </CardContent>
-        </Card>
+        </RowCard>
     );
 }
 
@@ -333,14 +301,14 @@ function HistoryPanel({ feedSource }: { feedSource: string }) {
     const runs: FeedSyncRun[] = data?.runs ?? [];
 
     if (isLoading) {
-        return <div className="mt-3 text-[11px] text-muted-foreground/70">Loading history…</div>;
+        return <div className="text-[11px] text-muted-foreground/70">Loading history…</div>;
     }
     if (runs.length === 0) {
-        return <div className="mt-3 text-[11px] text-muted-foreground/70 italic">No sync history yet.</div>;
+        return <div className="text-[11px] text-muted-foreground/70 italic">No sync history yet.</div>;
     }
 
     return (
-        <div className="mt-3 space-y-1">
+        <div className="space-y-1">
             <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
                 Last {runs.length} runs
             </div>

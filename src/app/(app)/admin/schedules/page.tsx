@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { admin, type ScheduledJob, type IntervalPreset } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -13,9 +12,13 @@ import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Clock, Play, RefreshCw, Pause, CalendarClock, Loader2 } from 'lucide-react';
-import { cn, relTime } from '@/lib/utils';
+import { Clock, Play, Pause, CalendarClock, Loader2 } from 'lucide-react';
+import { relTime } from '@/lib/utils';
 import { toast } from 'sonner';
+import { PageHeader, RefreshAction } from '@/components/admin/page-header';
+import { RowCard } from '@/components/admin/row-card';
+import { StatField } from '@/components/admin/stat';
+import { StatusBadge, type StatusKind } from '@/lib/tone';
 
 const REFRESH_MS = 30_000;
 
@@ -83,19 +86,13 @@ export default function AdminSchedulesPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-end justify-between gap-4 flex-wrap">
-                <div>
-                    <h1 className="text-3xl font-semibold tracking-tight">Schedules</h1>
-                    <p className="text-sm text-muted-foreground mt-1 tabular-nums">
-                        {isLoading
-                            ? 'Loading…'
-                            : `${enabledCount}/${jobs.length} active · ${overriddenCount} customised`}
-                    </p>
-                </div>
-                <Button size="sm" variant="ghost" onClick={() => mutate()}>
-                    <RefreshCw className="size-3.5" /> Refresh
-                </Button>
-            </div>
+            <PageHeader
+                title="Schedules"
+                description={isLoading
+                    ? 'Loading…'
+                    : `${enabledCount}/${jobs.length} active · ${overriddenCount} customised`}
+                actions={<RefreshAction onClick={() => mutate()} />}
+            />
 
             {isLoading && (
                 <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">Loading schedules…</CardContent></Card>
@@ -164,28 +161,20 @@ function ScheduleRow({ job, onChanged }: { job: ScheduledJob; onChanged: () => v
 
     const isCustomised = job.override !== null;
     const presetValue: IntervalPreset | 'default' = job.override?.intervalPreset ?? 'default';
+    const tone: StatusKind | undefined =
+        !job.enabled    ? 'paused'
+      : isCustomised    ? 'custom'
+      : undefined;
 
     return (
-        <Card className={cn(
-            'transition-colors',
-            !job.enabled && 'opacity-60 border-l-2 border-l-amber-500/40',
-            job.enabled && isCustomised && 'border-l-2 border-l-brand/40',
-        )}>
+        <RowCard tone={tone} muted={!job.enabled}>
             <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div className="min-w-0 flex-1">
                         <CardTitle className="text-base flex items-center gap-2 flex-wrap">
                             <span className="font-mono">{job.name}</span>
-                            {!job.enabled && (
-                                <Badge variant="outline" className="font-mono text-[10px] uppercase bg-amber-500/15 text-amber-400 border-amber-500/30">
-                                    Paused
-                                </Badge>
-                            )}
-                            {isCustomised && job.enabled && (
-                                <Badge variant="outline" className="font-mono text-[10px] uppercase bg-brand/15 text-brand border-brand/30">
-                                    Customised
-                                </Badge>
-                            )}
+                            {!job.enabled && <StatusBadge kind="paused">Paused</StatusBadge>}
+                            {isCustomised && job.enabled && <StatusBadge kind="custom">Customised</StatusBadge>}
                         </CardTitle>
                         <CardDescription className="text-xs mt-1">{job.description}</CardDescription>
                     </div>
@@ -205,11 +194,7 @@ function ScheduleRow({ job, onChanged }: { job: ScheduledJob; onChanged: () => v
                 </div>
             </CardHeader>
             <CardContent className="pt-0 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Interval preset */}
-                <div className="space-y-1.5">
-                    <label className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-                        Interval
-                    </label>
+                <StatField label="Interval">
                     <Select
                         value={presetValue}
                         onValueChange={(v) => {
@@ -218,7 +203,7 @@ function ScheduleRow({ job, onChanged }: { job: ScheduledJob; onChanged: () => v
                         }}
                         disabled={busy || !job.enabled}
                     >
-                        <SelectTrigger className="h-9 text-xs">
+                        <SelectTrigger className="h-9 text-xs w-full">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -230,30 +215,24 @@ function ScheduleRow({ job, onChanged }: { job: ScheduledJob; onChanged: () => v
                             ))}
                         </SelectContent>
                     </Select>
-                </div>
+                </StatField>
 
-                {/* Status / next-run summary */}
-                <div className="space-y-1.5">
-                    <label className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-                        Active schedule
-                    </label>
-                    <div className="h-9 inline-flex items-center gap-2 px-2 text-xs">
-                        {job.enabled ? (
-                            <>
-                                <Clock className="size-3.5 text-muted-foreground" />
-                                <span className="font-mono">{describeCron(job.effectiveCron)}</span>
-                                <span className="text-muted-foreground/70 font-mono text-[10px]">
-                                    {job.effectiveCron}
-                                </span>
-                            </>
-                        ) : (
-                            <>
-                                <Pause className="size-3.5 text-amber-500" />
-                                <span className="text-muted-foreground">No automatic runs</span>
-                            </>
-                        )}
-                    </div>
-                </div>
+                <StatField label="Active schedule">
+                    {job.enabled ? (
+                        <div className="inline-flex items-center gap-2 text-xs">
+                            <Clock className="size-3.5 text-muted-foreground" />
+                            <span className="font-mono">{describeCron(job.effectiveCron)}</span>
+                            <span className="text-muted-foreground/70 font-mono text-[10px]">
+                                {job.effectiveCron}
+                            </span>
+                        </div>
+                    ) : (
+                        <div className="inline-flex items-center gap-2 text-xs">
+                            <Pause className="size-3.5 text-amber-500" />
+                            <span className="text-muted-foreground">No automatic runs</span>
+                        </div>
+                    )}
+                </StatField>
 
                 {/* Footer micro-row: queue, last updated */}
                 <div className="sm:col-span-2 flex items-center justify-between text-[10px] text-muted-foreground/70 font-mono tabular-nums pt-1 border-t border-border/50 mt-1">
@@ -263,6 +242,6 @@ function ScheduleRow({ job, onChanged }: { job: ScheduledJob; onChanged: () => v
                     )}
                 </div>
             </CardContent>
-        </Card>
+        </RowCard>
     );
 }
