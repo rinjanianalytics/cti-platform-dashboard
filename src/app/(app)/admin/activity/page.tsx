@@ -20,6 +20,8 @@ import {
 import { EmptyState } from '@/components/ui/empty-state';
 import { Activity, AlertTriangle, Pause, Play, RefreshCw } from 'lucide-react';
 import { cn, relTime } from '@/lib/utils';
+import { PageHeader } from '@/components/admin/page-header';
+import { StatusBadge } from '@/lib/tone';
 
 const MAX_EVENTS = 250;
 
@@ -116,15 +118,13 @@ export default function AdminActivityPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-end justify-between gap-4 flex-wrap">
-                <div>
-                    <h1 className="text-3xl font-semibold tracking-tight">Activity</h1>
-                    <p className="text-sm text-muted-foreground mt-1 tabular-nums">
-                        Live job event stream · {events.length.toLocaleString()} buffered
-                        {paused && <span className="ml-2 text-amber-400">· paused</span>}
-                    </p>
-                </div>
-                <div className="flex items-center gap-2">
+            <PageHeader
+                title="Activity"
+                description={<>
+                    Live job event stream · {events.length.toLocaleString()} buffered
+                    {paused && <span className="ml-2 text-amber-400">· paused</span>}
+                </>}
+                actions={<>
                     <Select value={queueFilter} onValueChange={(v) => setQueueFilter(v ?? 'all')}>
                         <SelectTrigger className="w-44 h-9">
                             <SelectValue placeholder="All queues" />
@@ -148,8 +148,8 @@ export default function AdminActivityPage() {
                     <Button size="sm" variant="ghost" onClick={() => setEvents([])} title="Clear local buffer">
                         <RefreshCw className="size-3.5" />
                     </Button>
-                </div>
-            </div>
+                </>}
+            />
 
             {/* Throughput strip — per-queue counters over the server's ring buffer */}
             {queues.length > 0 && (
@@ -251,9 +251,9 @@ function FailurePanel({
                 <div className="flex items-center gap-2 mb-2">
                     <AlertTriangle className="size-4 text-red-400" />
                     <span className="text-sm font-medium">Recent failures</span>
-                    <Badge variant="outline" className="font-mono text-[10px] bg-red-500/15 text-red-400 border-red-500/30">
+                    <StatusBadge kind="failed">
                         {totalFailed} total · {groups.length} group{groups.length === 1 ? '' : 's'}
-                    </Badge>
+                    </StatusBadge>
                 </div>
                 <ul className="space-y-1">
                     {groups.slice(0, 8).map(g => (

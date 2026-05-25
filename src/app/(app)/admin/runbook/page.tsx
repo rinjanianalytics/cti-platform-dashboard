@@ -32,10 +32,12 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import {
-    CheckCircle2, AlertCircle, BookOpen, Cpu, Network,
+    BookOpen, Cpu, Network,
     Workflow, Wrench, Siren, RefreshCw, ListChecks, Database,
 } from 'lucide-react';
 import { cn, relTime } from '@/lib/utils';
+import { PageHeader } from '@/components/admin/page-header';
+import { StatusTile } from '@/components/admin/stat';
 
 const REFRESH_MS = 30_000;
 
@@ -73,25 +75,21 @@ export default function AdminRunbookPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div>
-                    <h1 className="text-3xl font-semibold tracking-tight">Runbook</h1>
-                    <p className="text-sm text-muted-foreground mt-1">
-                        Open this page first when something is on fire. Live dependency
-                        health + currently-firing failure groups up top; copy-pasteable
-                        procedures and a five-step incident checklist below.
-                    </p>
-                </div>
-                <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => { refetchServices(); refetchFailures(); }}
-                    disabled={isLoading}
-                >
-                    <RefreshCw className={cn('size-3.5', isLoading && 'animate-spin')} />
-                    Refresh now
-                </Button>
-            </div>
+            <PageHeader
+                title="Runbook"
+                description="Open this page first when something is on fire. Live dependency health + currently-firing failure groups up top; copy-pasteable procedures and a five-step incident checklist below."
+                actions={
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => { refetchServices(); refetchFailures(); }}
+                        disabled={isLoading}
+                    >
+                        <RefreshCw className={cn('size-3.5', isLoading && 'animate-spin')} />
+                        Refresh now
+                    </Button>
+                }
+            />
 
             {/* ── Service summary + live dependencies ────────────────────────── */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -128,50 +126,50 @@ export default function AdminRunbookPage() {
                     </CardHeader>
                     <CardContent>
                         {!services ? (
-                            <SkeletonRows n={6} />
+                            <SkeletonRows n={8} />
                         ) : (
-                            <div className="flex flex-col gap-1.5">
-                                <DepRow
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <StatusTile
                                     label="Postgres"
-                                    ok={services.datastores.postgres.connected}
+                                    tone={services.datastores.postgres.connected ? 'success' : 'failed'}
                                     detail={services.datastores.postgres.latencyMs != null
                                         ? `${services.datastores.postgres.latencyMs}ms`
                                         : services.datastores.postgres.error}
                                 />
-                                <DepRow
+                                <StatusTile
                                     label="OpenSearch"
-                                    ok={services.datastores.opensearch.connected}
+                                    tone={services.datastores.opensearch.connected ? 'success' : 'failed'}
                                     detail={services.datastores.opensearch.status
                                         ?? services.datastores.opensearch.error}
                                 />
-                                <DepRow
+                                <StatusTile
                                     label="Redis · queue"
-                                    ok={services.datastores.redis.queue.connected}
+                                    tone={services.datastores.redis.queue.connected ? 'success' : 'failed'}
                                 />
-                                <DepRow
+                                <StatusTile
                                     label="Redis · cache"
-                                    ok={services.datastores.redis.cache.connected}
+                                    tone={services.datastores.redis.cache.connected ? 'success' : 'failed'}
                                 />
-                                <DepRow
+                                <StatusTile
                                     label="Neo4j"
-                                    ok={services.datastores.neo4j.connected}
+                                    tone={services.datastores.neo4j.connected ? 'success' : 'failed'}
                                     detail={services.datastores.neo4j.error}
                                 />
-                                <DepRow
+                                <StatusTile
                                     label="OSV (CVSS primary)"
-                                    ok={services.enrichmentSources?.osv?.available ?? false}
+                                    tone={(services.enrichmentSources?.osv?.available ?? false) ? 'success' : 'failed'}
                                     detail={services.enrichmentSources?.osv?.latencyMs != null
                                         ? `${services.enrichmentSources.osv.latencyMs}ms`
                                         : 'no probe'}
                                 />
-                                <DepRow
+                                <StatusTile
                                     label="NVD (CVSS fallback)"
-                                    ok={services.enrichmentSources?.nvd?.available ?? false}
+                                    tone={(services.enrichmentSources?.nvd?.available ?? false) ? 'success' : 'failed'}
                                     detail={services.enrichmentSources?.nvd?.note}
                                 />
-                                <DepRow
-                                    label="Worker process"
-                                    ok={services.process.workerActive}
+                                <StatusTile
+                                    label="Worker"
+                                    tone={services.process.workerActive ? 'success' : 'failed'}
                                     detail={`${services.process.totalConnectedWorkers} connected`}
                                 />
                             </div>
@@ -189,16 +187,16 @@ export default function AdminRunbookPage() {
                 </CardHeader>
                 <CardContent className="px-0">
                     {failuresLoading ? (
-                        <div className="px-6"><SkeletonRows n={3} /></div>
+                        <div className="px-4"><SkeletonRows n={3} /></div>
                     ) : !failures || failures.groups.length === 0 ? (
-                        <p className="text-xs text-muted-foreground italic px-6">
+                        <p className="text-xs text-muted-foreground italic px-4">
                             All clear — no active failure groups. When workers fail, errors
                             land here grouped by normalised signature with first-response
                             guidance.
                         </p>
                     ) : (
-                        <div className="divide-y">
-                            <div className="grid grid-cols-[1fr_70px_140px_110px] gap-3 px-6 py-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                        <div className="divide-y divide-border/40">
+                            <div className="grid grid-cols-[1fr_64px_120px_88px] gap-3 px-4 py-2 text-[10px] font-mono uppercase tracking-wider text-muted-foreground/80">
                                 <span>Signature · first response</span>
                                 <span className="text-right">Count</span>
                                 <span>Queues</span>
@@ -209,7 +207,7 @@ export default function AdminRunbookPage() {
                                 return (
                                     <div
                                         key={g.signature}
-                                        className="grid grid-cols-[1fr_70px_140px_110px] gap-3 px-6 py-3 text-sm items-start"
+                                        className="grid grid-cols-[1fr_64px_120px_88px] gap-3 px-4 py-3 text-sm items-start"
                                     >
                                         <div className="min-w-0 space-y-1">
                                             <div className="font-mono text-xs break-all">
@@ -230,21 +228,15 @@ export default function AdminRunbookPage() {
                                         </span>
                                         <div className="flex flex-wrap gap-1">
                                             {g.queues.slice(0, 2).map(q => (
-                                                <Badge
-                                                    key={q}
-                                                    variant="outline"
-                                                    className="font-mono text-[9px] uppercase"
-                                                >
-                                                    {q}
-                                                </Badge>
+                                                <Badge key={q} variant="outline" className="font-mono text-[9px] uppercase">{q}</Badge>
                                             ))}
                                             {g.queues.length > 2 && (
-                                                <span className="text-[10px] text-muted-foreground self-center">
+                                                <span className="text-[10px] text-muted-foreground/70 self-center font-mono">
                                                     +{g.queues.length - 2}
                                                 </span>
                                             )}
                                         </div>
-                                        <span className="text-right text-xs text-muted-foreground tabular-nums">
+                                        <span className="text-right text-[11px] text-muted-foreground tabular-nums font-mono">
                                             {relTime(g.lastSeen)}
                                         </span>
                                     </div>
@@ -301,30 +293,6 @@ export default function AdminRunbookPage() {
                 <code className="text-[11px]">/admin/runbook/page.tsx</code> to evolve them
                 as new failure modes appear.
             </p>
-        </div>
-    );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Dependency row                                                             */
-/* -------------------------------------------------------------------------- */
-
-function DepRow({ label, ok, detail }: { label: string; ok: boolean; detail?: string }) {
-    return (
-        <div className="flex items-center justify-between gap-3 text-sm">
-            <span className="font-mono text-xs flex items-center gap-2 min-w-0">
-                {ok ? (
-                    <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
-                ) : (
-                    <AlertCircle className="size-3.5 text-red-400 shrink-0" />
-                )}
-                <span className="truncate">{label}</span>
-            </span>
-            {detail && (
-                <span className="text-[11px] font-mono text-muted-foreground truncate ml-2 text-right">
-                    {detail}
-                </span>
-            )}
         </div>
     );
 }
@@ -417,20 +385,23 @@ const PROCEDURES: ProcedureDef[] = [
 
 function Procedure({ title, icon: Icon, when, blurb, snippet, adminLink }: ProcedureDef) {
     return (
-        <div className="flex flex-col gap-2 rounded-lg border bg-muted/20 p-4">
+        <div className="flex flex-col gap-2.5 rounded-lg border bg-muted/20 p-3">
             <div className="flex items-center gap-2">
-                <Icon className="size-4 text-muted-foreground shrink-0" />
-                <span className="font-medium text-sm">{title}</span>
+                <Icon className="size-3.5 text-muted-foreground shrink-0" />
+                <span className="font-medium text-sm flex-1 min-w-0">{title}</span>
             </div>
-            <p className="text-[11px] text-muted-foreground italic">Use when: {when}</p>
-            <p className="text-xs text-muted-foreground">{blurb}</p>
+            <div className="flex items-baseline gap-2">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground/80 shrink-0">When</span>
+                <span className="text-[11px] text-muted-foreground">{when}</span>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">{blurb}</p>
             <pre className="text-[11px] font-mono leading-relaxed bg-background border rounded-md p-3 overflow-x-auto whitespace-pre">
                 {snippet}
             </pre>
             {adminLink && (
                 <Link
                     href={adminLink.href}
-                    className="text-[11px] text-primary hover:underline"
+                    className="text-[11px] font-mono text-primary hover:underline"
                 >
                     {adminLink.label}
                 </Link>
