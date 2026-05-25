@@ -164,13 +164,23 @@ export default function ActorsPage() {
                 : <span className="text-xs text-muted-foreground">—</span>,
         },
         {
-            id: 'updated',
-            header: 'Updated',
+            // Prefer upstream `lastSeen` over scheduler `updatedAt` so the column
+            // answers "when was this actor last active per the data source",
+            // not "when did our cron last touch the row". Falls back to
+            // `stixModified` then `firstSeen` when `lastSeen` isn't recorded.
+            id: 'lastSeen',
+            header: 'Last seen',
             width: 'w-22',
             align: 'right',
-            accessor: a => a.updatedAt ? Date.parse(a.updatedAt) : null,
+            accessor: a => {
+                const ts = a.lastSeen ?? a.stixModified ?? a.firstSeen;
+                return ts ? Date.parse(ts) : null;
+            },
             sortable: true,
-            cell: a => <span className="text-xs text-muted-foreground tabular-nums">{relTime(a.updatedAt)}</span>,
+            cell: a => {
+                const ts = a.lastSeen ?? a.stixModified ?? a.firstSeen;
+                return <span className="text-xs text-muted-foreground tabular-nums">{relTime(ts)}</span>;
+            },
         },
     ];
 

@@ -154,21 +154,23 @@ export default function VulnerabilitiesPage() {
             cell: r => <span className="text-xs text-muted-foreground tabular-nums">{relTime(r.publishedDate)}</span>,
         },
         {
-            // Prefer `updatedAt` (always populated from the OpenSearch index)
-            // over `lastModified` (often null because the indexer renames it).
-            // This is the freshness signal — "when did we last sync this CVE
-            // from NVD" — not just when it was first published.
-            id: 'updated',
-            header: 'Last sync',
-            width: 'w-20',
+            // Show NVD's `lastModified` (upstream "when did the source update
+            // this CVE") rather than our internal `updatedAt`. The OpenSearch
+            // indexer sets `updatedAt = lastModified` at index time, so the
+            // values are normally identical — but if `lastModified` is null
+            // we fall through to `updatedAt` then `publishedDate` rather than
+            // showing nothing.
+            id: 'lastModified',
+            header: 'Last modified',
+            width: 'w-22',
             align: 'right',
             accessor: r => {
-                const ts = r.updatedAt ?? r.lastModified;
+                const ts = r.lastModified ?? r.updatedAt ?? r.publishedDate;
                 return ts ? Date.parse(ts) : null;
             },
             sortable: true,
             cell: r => {
-                const ts = r.updatedAt ?? r.lastModified;
+                const ts = r.lastModified ?? r.updatedAt ?? r.publishedDate;
                 return <span className="text-xs text-muted-foreground tabular-nums">{relTime(ts)}</span>;
             },
         },

@@ -23,6 +23,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Search, X, Users, MoreVertical, ShieldOff, ShieldCheck, UserCog, Flame } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, relTime } from '@/lib/utils';
+import { PageHeader } from '@/components/admin/page-header';
+import { StatusBadge } from '@/lib/tone';
 
 const PAGE_SIZE = 25;
 
@@ -111,8 +113,8 @@ export default function AdminUsersPage() {
             accessor: u => u.isActive ? 1 : 0,
             sortable: true,
             cell: u => u.isActive
-                ? <Badge variant="outline" className="font-mono text-[10px] uppercase bg-emerald-500/15 text-emerald-400 border-emerald-500/30">Active</Badge>
-                : <Badge variant="outline" className="font-mono text-[10px] uppercase bg-slate-500/15 text-slate-400 border-slate-500/30">Disabled</Badge>,
+                ? <StatusBadge kind="success">Active</StatusBadge>
+                : <StatusBadge kind="idle">Disabled</StatusBadge>,
         },
         {
             id: 'lastLogin',
@@ -135,14 +137,10 @@ export default function AdminUsersPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-end justify-between gap-4 flex-wrap">
-                <div>
-                    <h1 className="text-3xl font-semibold tracking-tight">Users</h1>
-                    <p className="text-sm text-muted-foreground mt-1 tabular-nums">
-                        {isLoading ? 'Loading…' : `${total.toLocaleString()} user${total === 1 ? '' : 's'}`}
-                    </p>
-                </div>
-            </div>
+            <PageHeader
+                title="Users"
+                description={isLoading ? 'Loading…' : `${total.toLocaleString()} user${total === 1 ? '' : 's'}`}
+            />
 
             <div className="flex items-center gap-2 flex-wrap">
                 <div className="relative flex-1 min-w-60 max-w-md">
