@@ -336,20 +336,19 @@ const PROCEDURES: ProcedureDef[] = [
         icon: Workflow,
         when: 'When a worker bug stuck a batch in failed state',
         blurb:
-            'Both actions are wired into the admin UI; the curl form is here for scripted use.',
+            'Use Workbench for the UI flow (retry / clean / drain per queue); the curl form is here for scripted use.',
         snippet:
-            '# admin UI: /admin/queues → pick queue → "Retry all"\ncurl -X POST -H "Authorization: Bearer $TOKEN" \\\n  $API/admin/queue/cve-enrichment/retry-all\n\n# clean completed entries older than 1h\ncurl -X POST -H "Authorization: Bearer $TOKEN" \\\n  "$API/admin/queue/cve-enrichment/clean/completed?grace=3600000"',
-        adminLink: { href: '/admin/queues', label: 'Open /admin/queues →' },
+            '# admin UI: /admin/workbench → pick queue → use the action menu\ncurl -X POST -H "Authorization: Bearer $TOKEN" \\\n  $API/admin/queue/cve-enrichment/retry-all\n\n# clean completed entries older than 1h\ncurl -X POST -H "Authorization: Bearer $TOKEN" \\\n  "$API/admin/queue/cve-enrichment/clean/completed?grace=3600000"',
+        adminLink: { href: '/admin/workbench', label: 'Open Workbench →' },
     },
     {
         title: 'Trigger CVSS backfill (OSV → NVD)',
         icon: Wrench,
         when: 'After a bulk import of CVEs without scores; or as a smoke test',
         blurb:
-            'Delegates to triggerEnrichmentSweep("cve-enrich"). Uses Redis dedup so back-to-back calls collapse to one sweep.',
+            'No longer one-click in the dashboard (the bulk-operations page was retired in favour of Workbench). Run the curl form directly, or queue an ad-hoc job from Workbench against the cve-enrichment queue.',
         snippet:
-            '# one-click in /admin/jobs, or:\ncurl -X POST -H "Authorization: Bearer $TOKEN" \\\n  $API/admin/jobs/cvss-backfill',
-        adminLink: { href: '/admin/jobs', label: 'Open /admin/jobs →' },
+            'curl -X POST -H "Authorization: Bearer $TOKEN" \\\n  $API/admin/jobs/cvss-backfill',
     },
     {
         title: 'Force a feed sync (any registered source)',
@@ -418,17 +417,17 @@ const INCIDENT_STEPS: Array<{ title: string; body: string }> = [
     {
         title: 'Acknowledge — establish that you\'re on it.',
         body:
-            'If the alert came from /admin/activity or a Slack webhook, mark it ack\'d so a co-admin doesn\'t double-respond. If you can\'t respond within 5 minutes, hand off explicitly.',
+            'If the alert came from the Alerts panel above (or a Slack webhook), mark it ack\'d so a co-admin doesn\'t double-respond. If you can\'t respond within 5 minutes, hand off explicitly.',
     },
     {
-        title: 'Triage with /admin/services + /admin/activity.',
+        title: 'Triage with /admin/services + Workbench.',
         body:
-            'Services tells you whether a datastore is the root cause. Activity tells you which queue is bleeding. If both look green, suspect ingress (auth, OAuth, rate-limits) — check /admin/audit for recent admin actions.',
+            'Services tells you whether a datastore is the root cause. Open Workbench to see which queue is bleeding (failed counts, stalled jobs). If both look green, suspect ingress (auth, OAuth, rate-limits) — check /admin/audit for recent admin actions.',
     },
     {
         title: 'Mitigate before you diagnose.',
         body:
-            'A queue is jammed? Drain failed jobs and retry. A feed is throwing 5xx? Disable its schedule (toggle in /admin/schedules) — partial data beats no data. The post-mortem can wait; the user-facing 500 cannot.',
+            'A queue is jammed? Use Workbench to drain failed jobs and retry. A feed is throwing 5xx? Disable its schedule (the underlying repeatable lives in Workbench → Schedulers, or edit JOB_REGISTRY in apps/api/src/queues/scheduler.ts) — partial data beats no data. The post-mortem can wait; the user-facing 500 cannot.',
     },
     {
         title: 'Confirm restoration via the dependency panel above.',
