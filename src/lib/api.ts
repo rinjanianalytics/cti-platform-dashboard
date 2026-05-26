@@ -11,6 +11,10 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const BOOTSTRAP_KEY = process.env.NEXT_PUBLIC_API_KEY ?? '';
 
 const TOKEN_KEY = 'rinjani.token';
+const TOKEN_COOKIE = 'rinjani_token';
+// 24h to match the JWT's exp. The backend will reject an expired cookie
+// regardless; this is just so the browser eventually GCs it.
+const TOKEN_COOKIE_TTL_S = 24 * 60 * 60;
 
 export function getToken(): string | null {
     if (typeof window === 'undefined') return null;
@@ -18,8 +22,35 @@ export function getToken(): string | null {
 }
 export function setToken(t: string | null) {
     if (typeof window === 'undefined') return;
-    if (t) window.localStorage.setItem(TOKEN_KEY, t);
-    else window.localStorage.removeItem(TOKEN_KEY);
+    if (t) {
+        window.localStorage.setItem(TOKEN_KEY, t);
+        writeAuthCookie(t);
+    } else {
+        window.localStorage.removeItem(TOKEN_KEY);
+        clearAuthCookie();
+    }
+}
+
+/**
+ * Mirror the JWT into a cookie on the dashboard's own origin so embedded
+ * same-origin UIs (Workbench at /admin/workbench, proxied through Next's
+ * rewrite) can ride our session without a second auth layer. The cookie
+ * cannot be httpOnly because it's set from JS — but it offers no less
+ * security than the localStorage entry it shadows, since both are
+ * readable by any script in this origin. Defense-in-depth (httpOnly via
+ * a server-set cookie) is a separate slice if XSS protection becomes a
+ * concern beyond what our React tree already guarantees.
+ *
+ * `SameSite=Lax` so navigations from external sites won't carry the
+ * cookie, but our own same-origin fetches and rewrites do.
+ * `Secure` is added automatically on https origins.
+ */
+function writeAuthCookie(token: string) {
+    const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${TOKEN_COOKIE}=${encodeURIComponent(token)}; path=/; max-age=${TOKEN_COOKIE_TTL_S}; SameSite=Lax${secure}`;
+}
+function clearAuthCookie() {
+    document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
 }
 
 /**
