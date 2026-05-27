@@ -35,6 +35,33 @@ const nextConfig: NextConfig = {
         NEXT_PUBLIC_GIT_BRANCH: gitBranch,
         NEXT_PUBLIC_GITHUB_REPO: 'rinjanianalytics/v304-dashboard-rinjani',
     },
+    /**
+     * Same-origin proxy for the embedded Workbench dashboard.
+     *
+     * Workbench mounts on the API at `/admin/workbench/*`. Routing it
+     * through Next.js means:
+     *   • Browser hits dashboard.host/admin/workbench → same origin →
+     *     basic-auth credentials persist for the whole session.
+     *   • Workbench's internal fetches stay relative and pass through
+     *     transparently — no CORS, no cross-origin cookie issues.
+     *
+     * `NEXT_PUBLIC_API_URL` is the same env var the rest of the
+     * dashboard uses to reach the API, so this stays consistent across
+     * dev / staging / prod.
+     */
+    async rewrites() {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+        return [
+            // Workbench is served by the API at `/admin/workbench/*`. Proxying
+            // through Next.js keeps it same-origin so our `rinjani_token`
+            // cookie auto-attaches. The route is a full-page takeover (not
+            // iframed) — workbench's own X-Frame-Options would block embedding.
+            {
+                source: '/admin/workbench/:path*',
+                destination: `${apiUrl}/admin/workbench/:path*`,
+            },
+        ];
+    },
 };
 
 export default nextConfig;
