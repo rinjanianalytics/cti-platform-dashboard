@@ -43,6 +43,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setIsLoading(false);
             return;
         }
+        // Re-sync — for users whose localStorage already has a token (e.g.
+        // upgraded across the cookie-auth deploy), this populates the
+        // `rinjani_token` cookie that embedded UIs like Workbench rely on.
+        // No-op for fresh logins since `setToken` was just called there.
+        setToken(token);
         auth.me().then(setUser)
             .catch((err) => {
                 if (err instanceof ApiError && err.status === 401) setToken(null);

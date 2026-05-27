@@ -17,7 +17,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
     LayoutDashboard, Radar, Shield, Users, Database, Workflow,
-    LogOut, ChevronLeft, ChevronRight, ServerCog, UsersRound, UserCircle2, Layers, Play, ScrollText, CalendarClock, Activity, GitFork, BookOpen, Network,
+    LogOut, ChevronLeft, ChevronRight, ServerCog, UsersRound, UserCircle2, ScrollText, BookOpen, Network, Boxes,
+    CalendarClock,
 } from 'lucide-react';
 import { SearchPalette } from '@/components/search-palette';
 import { HeaderSearch } from '@/components/header-search';
@@ -40,24 +41,37 @@ const NAV = [
 // ceiling (≤5 per nav group); grouped into Operations / Configuration /
 // Governance the sidebar reads as three small lists instead of one wall.
 // `roles` lists which user roles see the entry; defaults to admin-only.
-type AdminNavItem = { href: string; label: string; icon: typeof ServerCog; roles?: string[] };
+// `external: true` marks routes served outside Next.js (e.g. Workbench at
+// /admin/workbench, which is reverse-proxied to the API). Those entries render
+// as plain anchors so the browser does a hard navigation — Next's <Link>
+// would try to prefetch a non-existent JSON manifest for the route.
+type AdminNavItem = { href: string; label: string; icon: typeof ServerCog; roles?: string[]; external?: boolean };
 const ADMIN_NAV_GROUPS: Array<{ heading: string; items: AdminNavItem[] }> = [
     {
         heading: 'Operations',
         items: [
             { href: '/admin/services', label: 'Services', icon: ServerCog },
             { href: '/admin/runbook',  label: 'Runbook',  icon: BookOpen },
-            { href: '/admin/activity', label: 'Activity', icon: Activity, roles: ['admin', 'auditor'] },
-            { href: '/admin/pipeline', label: 'Pipeline', icon: GitFork,  roles: ['admin', 'auditor'] },
+            // Workbench replaces our former Queues / Activity / Pipeline /
+            // Jobs pages — full-page takeover (not iframed; its
+            // X-Frame-Options blocks framing). Browser back returns here.
+            // Schedules came back as a native page (Configuration group)
+            // because Workbench's Schedulers tab is view-only and we need
+            // edit/disable for cron presets. Backend admin API endpoints
+            // for the deleted concepts are kept so Runbook's failure-grouping
+            // panel still works.
+            { href: '/admin/workbench', label: 'Workbench', icon: Boxes, external: true },
         ],
     },
     {
         heading: 'Configuration',
         items: [
-            { href: '/admin/feeds',     label: 'Feeds',     icon: Database, roles: ['admin', 'auditor'] },
+            { href: '/admin/feeds',     label: 'Feeds',     icon: Database,      roles: ['admin', 'auditor'] },
+            // Schedules is back — Workbench's Schedulers tab is view-only and
+            // can't edit cron presets / enable-disable our 13 registered jobs.
+            // This page reads/writes scheduled_job_overrides via the existing
+            // /admin/schedules API and reconciles BullMQ in one call.
             { href: '/admin/schedules', label: 'Schedules', icon: CalendarClock },
-            { href: '/admin/jobs',      label: 'Jobs',      icon: Play },
-            { href: '/admin/queues',    label: 'Queues',    icon: Layers },
         ],
     },
     {
@@ -133,7 +147,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                                                 <SidebarMenuButton
                                                     isActive={isActive(item.href)}
                                                     tooltip={item.label}
-                                                    render={<Link href={item.href} />}
+                                                    // External routes (Workbench) bypass Next's <Link>
+                                                    // to avoid prefetching a non-existent route manifest.
+                                                    render={item.external
+                                                        ? <a href={item.href} />
+                                                        : <Link href={item.href} />}
                                                 >
                                                     <item.icon />
                                                     <span>{item.label}</span>
