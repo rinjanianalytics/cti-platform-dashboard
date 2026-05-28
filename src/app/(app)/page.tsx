@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Flame, AlertCircle, CheckCircle2, MinusCircle } from 'lucide-react';
 import { cn, severityTone, relTime } from '@/lib/utils';
+import { Sparkline, type SparklineTone } from '@/components/sparkline';
 
 const fmt = (n: number | null | undefined) =>
     n == null ? '—' : n.toLocaleString('en-US');
@@ -20,6 +21,13 @@ export default function OverviewPage() {
     const { data: landscape } = useSWR('overview:landscape', () => platform.landscape());
     const { data: tags } = useSWR('overview:trending', () => platform.trendingTags());
     const { data: feeds } = useSWR('overview:feeds', () => platform.feedMonitoring());
+    // 7-day daily-bucketed trends for the four KPI tile sparklines.
+    // Refresh every minute — the underlying data only moves on feed-sync ticks.
+    const { data: sparks } = useSWR(
+        'overview:sparklines',
+        () => platform.sparklines(7),
+        { refreshInterval: 60_000 },
+    );
 
     const healthList = Object.entries(health?.services ?? {});
     const upCount = healthList.filter(([, v]) =>
@@ -63,13 +71,17 @@ export default function OverviewPage() {
             {/* ── KPI strip — compact, single row ────────────────────────────── */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border rounded-md overflow-hidden border">
                 <KpiCell label="Indicators" value={fmt(counts?.iocs)} href="/iocs"
-                    sub={landscape ? `${fmt(landscape.iocs.high)} high · ${fmt(landscape.iocs.critical)} crit` : undefined} />
+                    sub={landscape ? `${fmt(landscape.iocs.high)} high · ${fmt(landscape.iocs.critical)} crit` : undefined}
+                    spark={sparks?.iocs} sparkTone="success" sparkLabel="New IOCs per day, last 7 days" />
                 <KpiCell label="Vulnerabilities" value={fmt(counts?.vulnerabilities)} href="/vulnerabilities"
-                    sub={landscape ? `${fmt(landscape.vulnerabilities.high)} high · ${fmt(landscape.vulnerabilities.critical)} crit` : undefined} />
+                    sub={landscape ? `${fmt(landscape.vulnerabilities.high)} high · ${fmt(landscape.vulnerabilities.critical)} crit` : undefined}
+                    spark={sparks?.vulnerabilities} sparkTone="warning" sparkLabel="New vulnerabilities per day, last 7 days" />
                 <KpiCell label="Threat actors" value={fmt(counts?.threatActors)} href="/actors"
-                    sub={actors ? `${actors.actors.length} active this week` : undefined} />
+                    sub={actors ? `${actors.actors.length} active this week` : undefined}
+                    spark={sparks?.threatActors} sparkTone="muted" sparkLabel="Actors observed per day, last 7 days" />
                 <KpiCell label="Active feeds" value={feedList.length > 0 ? fmt(feedList.length) : '—'} href="/feeds"
-                    sub={feedList.length > 0 ? `${feedList.filter(f => f.health === 'healthy').length} healthy` : undefined} />
+                    sub={feedList.length > 0 ? `${feedList.filter(f => f.health === 'healthy').length} healthy` : undefined}
+                    spark={sparks?.feedSyncs} sparkTone="success" sparkLabel="Successful feed-sync runs per day, last 7 days" />
             </div>
 
             {/* ── Row 1: Type + Severity distribution ────────────────────────── */}
@@ -258,17 +270,39 @@ function Panel({
 }
 
 function KpiCell({
-    label, value, href, sub,
-}: { label: string; value: string; href: string; sub?: string }) {
+    label, value, href, sub, spark, sparkTone = 'success', sparkLabel,
+}: {
+    label: string;
+    value: string;
+    href: string;
+    sub?: string;
+    /** 7-day series for the trailing sparkline. Tile renders without it if omitted. */
+    spark?: number[];
+    sparkTone?: SparklineTone;
+    sparkLabel?: string;
+}) {
     return (
         <Link href={href} className="bg-card hover:bg-accent/30 transition-colors px-4 py-3 block">
             <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
                 {label}
             </p>
-            <p key={value} className="text-2xl font-semibold tracking-tight tabular-nums mt-1 motion-enter">{value}</p>
-            {sub && (
-                <p className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">{sub}</p>
-            )}
+            {/*
+              Two-column layout when there's a sparkline — value/sub on the left,
+              chart on the right — falls back to the original single-column layout
+              when the spark prop is omitted so the tile degrades gracefully if
+              the /v1/stats/sparklines call is still in flight or errored.
+            */}
+            <div className="flex items-end justify-between gap-3 mt-1">
+                <div className="min-w-0">
+                    <p key={value} className="text-2xl font-semibold tracking-tight tabular-nums motion-enter">{value}</p>
+                    {sub && (
+                        <p className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">{sub}</p>
+                    )}
+                </div>
+                {spark && spark.length > 0 && (
+                    <Sparkline data={spark} tone={sparkTone} label={sparkLabel} />
+                )}
+            </div>
         </Link>
     );
 }
