@@ -1,0 +1,54 @@
+name: ✨ Feature request
+description: New page, new filter, new visualisation, UX improvement.
+title: "feat: "
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What's awkward today? Who hits this and how often?
+      placeholder: "When triaging a stale alert, I have to X by Y, which …"
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Sketch, mock, or wireframe is hugely appreciated. Even ASCII is fine.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Where would this live?
+      multiple: true
+      options:
+        - New page / route
+        - Extension to existing page
+        - New shared component (`src/components/`)
+        - Admin surface (`/admin/*`)
+        - Graph explorer
+        - Authentication / OAuth flow
+        - Layout / navigation
+        - Theming / dark mode
+    validations:
+      required: true
+
+  - type: textarea
+    id: backend
+    attributes:
+      label: Backend support needed?
+      description: If this needs new API endpoints, link to the backend issue (cti-platform-api) or note "requires backend work" so we can coordinate.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I've searched existing issues
+          required: true
+        - label: I've read CONTRIBUTING.md
+          required: true

@@ -1,0 +1,13 @@
+# Default owner — auto-requested reviewer on every PR.
+*                                  @rinjanianalytics
+
+# Security-sensitive paths — explicit ownership signal
+/src/lib/auth.tsx                  @rinjanianalytics
+/src/lib/api.ts                    @rinjanianalytics
+/next.config.ts                    @rinjanianalytics
+/SECURITY.md                       @rinjanianalytics
+
+# Public-facing surfaces — first-impression files
+/README.md                         @rinjanianalytics
+/LICENSE                           @rinjanianalytics
+/.github/                          @rinjanianalytics
