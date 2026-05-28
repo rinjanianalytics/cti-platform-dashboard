@@ -21,7 +21,11 @@ on:
 
 env:
   NODE_VERSION: '20'
-  PNPM_VERSION: 9
+  # pnpm version is intentionally NOT pinned here — `pnpm/action-setup@v4`
+  # auto-reads `packageManager` from `package.json` (currently `pnpm@9.0.0`).
+  # Specifying both `version:` and `packageManager` causes the action to
+  # bail with `ERR_PNPM_BAD_PM_VERSION`. Bump `packageManager` in
+  # `package.json` to upgrade pnpm — CI will follow automatically.
 
 jobs:
   lint-and-typecheck:
@@ -32,8 +36,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -59,8 +61,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
