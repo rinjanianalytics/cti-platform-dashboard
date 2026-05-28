@@ -292,6 +292,13 @@ export interface AdminServicesReport {
     process: {
         bootlockOwner: string | null;
         bootlockHeldByThisProcess: boolean;
+        /**
+         * Distinguishes "no holder" from "Redis unreachable" — set since
+         * the backend's services audit (2026-05-28). Optional for forward-
+         * compat with older API instances.
+         */
+        bootlockState?: 'held' | 'unowned' | 'error';
+        bootlockError?: string;
         workerActive: boolean;
         totalConnectedWorkers: number;
         workersByQueue: Array<{ queue: string; workerCount: number }>;
@@ -300,7 +307,7 @@ export interface AdminServicesReport {
         postgres: { connected: boolean; latencyMs?: number; error?: string };
         opensearch: { connected: boolean; latencyMs?: number; status?: string; error?: string };
         redis: { queue: { connected: boolean; latency?: number }; cache: { connected: boolean; latency?: number } };
-        neo4j: { connected: boolean; latencyMs?: number; error?: string };
+        neo4j: { connected: boolean; latencyMs?: number; serverInfo?: string; error?: string };
     };
     llm: {
         gemini: { configured: boolean };
