@@ -1,0 +1,15 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: 🔒 Security vulnerability
+    url: https://github.com/rinjanianalytics/cti-platform-dashboard/blob/main/SECURITY.md
+    about: Found a security issue? Don't file a public issue — see our private reporting channel.
+  - name: 🛠️ Backend bug (API / workers / feed sync)
+    url: https://github.com/rinjanianalytics/cti-platform-api/issues/new/choose
+    about: If the issue is in the API rather than the dashboard UI, file it there instead.
+  - name: 💬 Question or discussion
+    url: https://github.com/rinjanianalytics/cti-platform-dashboard/discussions
+    about: For open-ended UX / design questions or anything that's not a bug or feature request.
+  - name: 📧 Direct contact
+    url: mailto:rinjanianalytics@gmail.com
+    about: For anything the templates don't cover.
