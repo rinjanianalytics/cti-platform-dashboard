@@ -3,7 +3,7 @@ import { execSync } from 'child_process';
 
 /**
  * Capture the current git commit at build time so the dashboard can display
- * a clickable build badge ("rinjanianalytics/v304-dashboard-rinjani · abc1234")
+ * a clickable build badge ("rinjanianalytics/cti-platform-dashboard · abc1234")
  * that deep-links to the exact commit on GitHub.
  *
  * Wrapped in try/catch because:
@@ -33,7 +33,7 @@ const nextConfig: NextConfig = {
         NEXT_PUBLIC_GIT_MSG: gitMsg,
         NEXT_PUBLIC_GIT_DATE: gitDate,
         NEXT_PUBLIC_GIT_BRANCH: gitBranch,
-        NEXT_PUBLIC_GITHUB_REPO: 'rinjanianalytics/v304-dashboard-rinjani',
+        NEXT_PUBLIC_GITHUB_REPO: 'rinjanianalytics/cti-platform-dashboard',
     },
     /**
      * Same-origin proxy for the embedded Workbench dashboard.
