@@ -1,0 +1,92 @@
+name: 🐛 Bug report
+description: A surface renders wrong, an action fails, or something looks off.
+title: "bug: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. The dashboard is a Next.js app that talks to the cti-platform-api backend — sometimes the issue is here, sometimes there. The "affected area" dropdown helps us route quickly.
+
+        If you're not sure whether it's a dashboard or backend issue, file it here and we'll move it if needed.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected surface
+      options:
+        - Overview (`/`)
+        - Vulnerabilities (`/vulnerabilities`)
+        - IOCs (`/iocs`)
+        - Threat actors / watchlist (`/actors`)
+        - MITRE ATT&CK pages (`/tactics`, `/techniques`, `/malware`, `/tools`)
+        - Graph explorer (`/graph`)
+        - Admin · Services (`/admin/services`)
+        - Admin · Schedules (`/admin/schedules`)
+        - Admin · Workbench (`/admin/workbench`)
+        - Admin · Runbook / Audit / Feeds / Users
+        - Login / OAuth flow
+        - Layout / sidebar / global chrome
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What did you observe?
+      placeholder: "When I X, I see Y, but expected Z."
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Sign in as <role>
+        2. Navigate to `/...`
+        3. Click <thing>
+        4. Observe <wrong behaviour>
+    validations:
+      required: true
+
+  - type: dropdown
+    id: viewport
+    attributes:
+      label: Viewport
+      multiple: true
+      options:
+        - Desktop (≥1280px)
+        - Tablet (768–1279px)
+        - Mobile (<768px)
+        - "Doesn't matter — backend issue surfacing here"
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser + version
+      placeholder: "Chrome 138, Firefox 142, Safari 18.5, …"
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Browser console / network errors
+      description: Open DevTools, reproduce the bug, paste any errors. Redact tokens.
+      render: text
+
+  - type: textarea
+    id: extras
+    attributes:
+      label: Additional context
+      description: Screenshots, hypotheses, what you tried, related backend issues.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I've searched existing issues
+          required: true
+        - label: I've redacted any tokens, internal URLs, or PII (especially anything from `Authorization` headers in the network tab)
+          required: true
