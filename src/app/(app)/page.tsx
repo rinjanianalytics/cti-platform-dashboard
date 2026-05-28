@@ -29,11 +29,47 @@ export default function OverviewPage() {
         { refreshInterval: 60_000 },
     );
 
+    // Tri-state service classification. OpenSearch reports cluster status
+    // as green/yellow/red — `yellow` is the *expected* state for a single-node
+    // deployment (no peer to host replica shards), but on a multi-node cluster
+    // it's a real signal. Splitting `degraded` out from `down` lets the
+    // dashboard show that honestly without lying in either direction.
     const healthList = Object.entries(health?.services ?? {});
-    const upCount = healthList.filter(([, v]) =>
-        ['healthy', 'up', 'connected', 'green', 'online'].includes((v?.status ?? '').toLowerCase()),
-    ).length;
-    const allUp = healthList.length > 0 && upCount === healthList.length;
+    const classify = (status: string): 'up' | 'degraded' | 'down' => {
+        const s = status.toLowerCase();
+        if (['healthy', 'up', 'connected', 'green', 'online', 'ok'].includes(s)) return 'up';
+        if (['yellow', 'degraded', 'warning', 'partial'].includes(s)) return 'degraded';
+        return 'down';
+    };
+    const buckets = healthList.reduce(
+        (acc, [name, v]) => {
+            const state = classify(v?.status ?? '');
+            acc[state].push(name);
+            return acc;
+        },
+        { up: [] as string[], degraded: [] as string[], down: [] as string[] },
+    );
+    const dotTone =
+        buckets.down.length > 0 ? 'bg-rose-500'
+        : buckets.degraded.length > 0 ? 'bg-amber-500'
+        : healthList.length > 0 ? 'bg-emerald-500'
+        : 'bg-muted-foreground';
+    const healthSummary = (() => {
+        if (healthList.length === 0) return 'connecting';
+        const parts: string[] = [];
+        if (buckets.up.length) parts.push(`${buckets.up.length} up`);
+        if (buckets.degraded.length) parts.push(`${buckets.degraded.length} degraded`);
+        if (buckets.down.length) parts.push(`${buckets.down.length} down`);
+        return parts.join(' · ');
+    })();
+    // Hover hint lists which service is in which non-up state — quick triage
+    // without having to open the admin page.
+    const healthTooltip = healthList.length === 0
+        ? ''
+        : [
+            buckets.degraded.length ? `Degraded: ${buckets.degraded.join(', ')}` : '',
+            buckets.down.length ? `Down: ${buckets.down.join(', ')}` : '',
+        ].filter(Boolean).join('\n') || 'All services healthy';
 
     const counts = stats?.counts;
     const tactics = coverage?.tactics ?? [];
@@ -60,10 +96,10 @@ export default function OverviewPage() {
                         Live snapshot · {landscape?.period ?? '7d'} window
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
-                    <span className={cn('inline-block size-1.5 rounded-full', allUp ? 'bg-emerald-500' : 'bg-amber-500')} />
+                <div className="flex items-center gap-2" title={healthTooltip}>
+                    <span className={cn('inline-block size-1.5 rounded-full', dotTone)} />
                     <span className="text-[11px] text-muted-foreground tabular-nums">
-                        {healthList.length === 0 ? 'connecting' : `${upCount}/${healthList.length} services healthy`}
+                        {healthSummary}
                     </span>
                 </div>
             </div>
