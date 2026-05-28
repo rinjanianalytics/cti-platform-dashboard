@@ -774,6 +774,21 @@ export const platform = {
     async stats(): Promise<{ counts: Stats }> {
         return request('/v1/stats');
     },
+    /**
+     * Daily-bucketed counts for the four overview KPI tiles — drives the
+     * Workbench-style sparkline next to each headline number on `/`.
+     * See `apps/api/src/routes/v1/stats.ts` for the backend; zero-filled so
+     * arrays are always length `days` regardless of activity.
+     */
+    async sparklines(days = 7): Promise<{
+        days: number;
+        iocs: number[];
+        vulnerabilities: number[];
+        threatActors: number[];
+        feedSyncs: number[];
+    }> {
+        return request(`/v1/stats/sparklines?days=${days}`);
+    },
     async health(): Promise<{ services: Record<string, { status: string }> }> {
         return request('/v1/ops/system');
     },
