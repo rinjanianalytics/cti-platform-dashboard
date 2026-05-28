@@ -197,11 +197,28 @@ function buildProbes(d: AdminServicesReport): Probe[] {
             ? `${d.process.totalConnectedWorkers} workers · ${d.process.workersByQueue.length} queues`
             : 'No workers connected',
     });
-    out.push({
-        group: 'process', label: 'Bootlock',
-        tone: d.process.bootlockOwner ? 'success' : 'failed',
-        detail: d.process.bootlockOwner ?? 'Nobody holds the lock',
-    });
+    // Bootlock — three distinct states matter to an operator:
+    //   held    : someone owns it, services are running. Green.
+    //   unowned : Redis is reachable but nothing claims the lock; usually a
+    //             tsx-watch reload tore the previous holder down. The
+    //             non-owner process polls every 30s (TTL) and will reclaim;
+    //             mark amber/paused so the operator knows it's transient.
+    //   error   : Redis itself is unreachable, can't tell. Red.
+    // For older API instances that don't yet return `bootlockState`, fall
+    // back to the original owner-string check.
+    {
+        const owner = d.process.bootlockOwner;
+        const state = d.process.bootlockState ?? (owner ? 'held' : 'unowned');
+        const tone: StatusKind =
+            state === 'held'  ? 'success'
+          : state === 'error' ? 'failed'
+          :                     'paused';
+        const detail =
+            state === 'held'  ? (owner ?? 'held')
+          : state === 'error' ? `Redis unreachable: ${d.process.bootlockError ?? 'unknown'}`
+          :                     'Unowned · reclaim poller will retry within 30s';
+        out.push({ group: 'process', label: 'Bootlock', tone, detail });
+    }
 
     // AI providers
     out.push({
