@@ -2,7 +2,10 @@
 
 import useSWR from 'swr';
 import Link from 'next/link';
-import { search, hitHref, hitLabel, type SearchEntityType, type SearchHit } from '@/lib/api';
+import {
+    search, hitHref, hitLabel, normalizeEntityType,
+    type SearchEntityType, type SearchHit,
+} from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -66,9 +69,17 @@ export function SimilarPanel({
                                     href={hitHref(hit)}
                                     className="grid grid-cols-[80px_1fr_50px] gap-3 items-center px-6 py-2 hover:bg-accent/40 transition-colors"
                                 >
-                                    <Badge variant="outline" className={cn('font-mono text-[10px] uppercase', ENTITY_TONE[hit.entityType] ?? '')}>
-                                        {hit.entityType.replace('_', ' ')}
-                                    </Badge>
+                                    {(() => {
+                                        // Normalize before tone lookup + label-format —
+                                        // OpenSearch indexes actors as `'threat-actor'`
+                                        // while ENTITY_TONE keys are canonical underscore.
+                                        const key = normalizeEntityType(hit.entityType);
+                                        return (
+                                            <Badge variant="outline" className={cn('font-mono text-[10px] uppercase', ENTITY_TONE[key] ?? '')}>
+                                                {key.replace('_', ' ')}
+                                            </Badge>
+                                        );
+                                    })()}
                                     <span className="text-sm font-mono truncate">{hitLabel(hit)}</span>
                                     {hit._score != null && (
                                         <span className="text-[10px] font-mono tabular-nums text-muted-foreground text-right">
