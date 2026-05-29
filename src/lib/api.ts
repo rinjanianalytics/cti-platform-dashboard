@@ -1130,9 +1130,30 @@ export interface SearchHit {
     _score?: number;
 }
 
+/**
+ * The backend's `type` query param on `/v1/search` and `/v1/search/vector`
+ * matches the **indexed `entityType` value**, which uses a hyphen for
+ * threat actors (`'threat-actor'`) — not the underscore form (`'threat_actor'`)
+ * we use canonically elsewhere in the dashboard. We accept `string` here
+ * rather than a tight union so callers can pass either wire form without
+ * an `as` cast; `searchTypeWire()` below converts from the canonical
+ * dashboard form to the wire form.
+ */
+type SearchWireType = string;
+
+/**
+ * Convert a canonical dashboard entity key to the wire form the backend's
+ * `?type=` filter expects. Specifically rewrites `'threat_actor'` →
+ * `'threat-actor'`. Other forms pass through.
+ */
+function searchTypeWire(t: SearchWireType | undefined): SearchWireType | undefined {
+    if (!t) return undefined;
+    return t === 'threat_actor' ? 'threat-actor' : t;
+}
+
 export const search = {
     async unified(opts: {
-        q: string; page?: number; pageSize?: number; type?: SearchEntityType;
+        q: string; page?: number; pageSize?: number; type?: SearchWireType;
     }): Promise<{
         query: string;
         items: SearchHit[];
@@ -1143,34 +1164,59 @@ export const search = {
         const qs = new URLSearchParams({ q: opts.q });
         if (opts.page) qs.set('page', String(opts.page));
         if (opts.pageSize) qs.set('pageSize', String(opts.pageSize));
-        if (opts.type) qs.set('type', opts.type);
+        const wire = searchTypeWire(opts.type);
+        if (wire) qs.set('type', wire);
         return request(`/v1/search?${qs.toString()}`);
     },
-    async vector(opts: { q: string; k?: number; type?: SearchEntityType }): Promise<{
+    async vector(opts: { q: string; k?: number; type?: SearchWireType }): Promise<{
         items: SearchHit[]; total: number; took: number;
     }> {
         const qs = new URLSearchParams({ q: opts.q });
         if (opts.k) qs.set('k', String(opts.k));
-        if (opts.type) qs.set('type', opts.type);
+        const wire = searchTypeWire(opts.type);
+        if (wire) qs.set('type', wire);
         return request(`/v1/search/vector?${qs.toString()}`);
     },
-    async similar(docId: string, opts: { k?: number; type?: SearchEntityType } = {}): Promise<{
+    async similar(docId: string, opts: { k?: number; type?: SearchWireType } = {}): Promise<{
         items: SearchHit[]; total: number; took: number;
     }> {
         const qs = new URLSearchParams();
         if (opts.k) qs.set('k', String(opts.k));
-        if (opts.type) qs.set('type', opts.type);
+        const wire = searchTypeWire(opts.type);
+        if (wire) qs.set('type', wire);
         const query = qs.toString();
         return request(`/v1/search/similar/${encodeURIComponent(docId)}${query ? `?${query}` : ''}`);
     },
 };
 
 /**
+ * Normalize the backend's `entityType` field (which uses `'threat-actor'`
+ * with a hyphen for actors, matching the OpenSearch index) to the canonical
+ * underscore form (`'threat_actor'`) the rest of the dashboard uses for
+ * route segments, prop types, and tone-map lookups.
+ *
+ * Why this exists: `hitHref` used to do `case 'threat_actor':` against the
+ * raw value. Actors are indexed as `'threat-actor'`, so the case never
+ * matched, threat-actor hits fell through to the default `/iocs/{id}`
+ * branch, and the IOC detail route 404'd because the UUID belonged to an
+ * actor — not an IOC. SimilarPanel had the same bug.
+ *
+ * Apply this once, at the boundary where you read `hit.entityType`.
+ */
+export function normalizeEntityType(raw: string): string {
+    const s = raw.toLowerCase();
+    if (s === 'threat-actor' || s === 'threatactor') return 'threat_actor';
+    return s;
+}
+
+/**
  * Best-effort link generator for a search hit.
- * Falls back to /search?q=... if we can't route to a typed page.
+ * Falls back to /iocs/{id} if we can't route to a typed page (which is
+ * still wrong for unknown types — log a warning if we ever see one in
+ * production so we can add a case).
  */
 export function hitHref(hit: SearchHit): string {
-    switch (hit.entityType) {
+    switch (normalizeEntityType(hit.entityType)) {
         case 'ioc':
             return `/iocs/${encodeURIComponent(hit.id)}`;
         case 'vulnerability':
