@@ -4,11 +4,70 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ============================================================================
+   Rinjani Command Center — design tokens (Phase 1 foundation).
+   ----------------------------------------------------------------------------
+   These tokens are the single source of truth for the new shell + Command
+   screen. They co-exist with the existing shadcn token set: shadcn's
+   semantic names (--background, --card, --border, --primary, --muted, etc.)
+   are aliased to the Command Center tokens inside `.dark` further down so
+   existing shadcn-based pages (still on Phase 1) pick up the new canvas
+   automatically without per-component changes.
+
+   Naming rule to avoid collisions with shadcn's --accent (which means
+   "subtle hover bg" in shadcn's vocabulary): the Command Center's brand
+   accent (signal cyan) is named --brand and its alpha/dim/hover/fg variants
+   are --brand-{soft,line,2,dim,fg}. Severity + status tokens are
+   net-new and conflict-free.
+   ========================================================================= */
+
+:root {
+    /* Severity — the ONLY warm colours in the app. */
+    --sev-crit:   oklch(0.640 0.215 18);
+    --sev-crit-s: oklch(0.640 0.215 18 / 0.16);
+    --sev-high:   oklch(0.715 0.175 48);
+    --sev-high-s: oklch(0.715 0.175 48 / 0.16);
+    --sev-med:    oklch(0.820 0.150 84);
+    --sev-med-s:  oklch(0.820 0.150 84 / 0.15);
+    --sev-low:    oklch(0.760 0.130 168);
+    --sev-low-s:  oklch(0.760 0.130 168 / 0.15);
+    --sev-info:   oklch(0.700 0.060 250);
+    --sev-info-s: oklch(0.700 0.060 250 / 0.15);
+
+    /* Status — service / feed health. Distinct from severity because
+       a healthy service is not "low severity", it's just up. */
+    --ok:    oklch(0.760 0.150 158);
+    --warn:  oklch(0.820 0.150 84);
+    --down:  oklch(0.640 0.215 22);
+    --idle:  oklch(0.520 0.012 256);
+
+    /* Geometry. --pad and --row-h are density-driven (see below). */
+    --r-xs: 4px;
+    --r-sm: 6px;
+    --r:    8px;
+    --r-lg: 12px;
+    --pad:  16px;
+    --row-h: 38px;
+
+    /* Shell shadows. */
+    --shadow-pop:  0 12px 40px -8px oklch(0 0 0 / 0.55), 0 2px 8px oklch(0 0 0 / 0.4);
+    --shadow-rail: -16px 0 48px -12px oklch(0 0 0 / 0.5);
+}
+
+/* Density classes — set on the app-root wrapper. The whole page reflows
+   compactly or roomy without touching component code; tables that need
+   their own local override can re-apply density-* on themselves. */
+.density-compact     { --pad: 12px; --row-h: 32px; }
+.density-comfortable { --pad: 18px; --row-h: 44px; }
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* next/font (root layout) provides --font-plex-sans and --font-plex-mono.
+     Bind Tailwind's canonical font tokens to those so `font-sans`,
+     `font-mono`, and `font-display` utilities resolve to IBM Plex. */
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --font-display: var(--font-display);
   --font-heading: var(--font-display);
   --color-brand: var(--brand);
@@ -48,6 +107,43 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* ---- Command Center utility colour exposure ----
+     Each --color-* here becomes a Tailwind utility class. The leading
+     prefix differs from shadcn's vocabulary (`bg-bg-1`, `text-text-2`,
+     etc.) — that's deliberate; it makes design-system intent obvious
+     in JSX (`bg-bg-1` = a Command Center panel surface; `bg-card` =
+     the shadcn shorthand which currently aliases to it). */
+  --color-bg-0: var(--bg-0);
+  --color-bg-1: var(--bg-1);
+  --color-bg-2: var(--bg-2);
+  --color-bg-3: var(--bg-3);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+  --color-text-4: var(--text-4);
+  --color-brand: var(--brand);
+  --color-brand-2: var(--brand-2);
+  --color-brand-dim: var(--brand-dim);
+  --color-brand-fg: var(--brand-fg);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-line: var(--brand-line);
+  --color-sev-crit: var(--sev-crit);
+  --color-sev-crit-soft: var(--sev-crit-s);
+  --color-sev-high: var(--sev-high);
+  --color-sev-high-soft: var(--sev-high-s);
+  --color-sev-med: var(--sev-med);
+  --color-sev-med-soft: var(--sev-med-s);
+  --color-sev-low: var(--sev-low);
+  --color-sev-low-soft: var(--sev-low-s);
+  --color-sev-info: var(--sev-info);
+  --color-sev-info-soft: var(--sev-info-s);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-down: var(--down);
+  --color-idle: var(--idle);
 }
 
 :root {
@@ -90,42 +186,67 @@
 }
 
 .dark {
-  /* Warm-shifted greys: chroma 0.005, hue 60 (warm yellow-ish) so the
-     dark surface reads slightly closer to a paper / analyst-console feel
-     rather than the pure-cold grey of `oklch(L 0 0)`. */
-  --background: oklch(0.145 0.005 60);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.005 60);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.005 60);
-  --popover-foreground: oklch(0.985 0 0);
-  /* Brand teal — #14b8a6 (Tailwind teal-500), sampled from rinjanianalytics.com. */
-  --brand: oklch(0.717 0.123 185);
-  --primary: oklch(0.717 0.123 185);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.27 0.005 60);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.27 0.005 60);
-  --muted-foreground: oklch(0.71 0.005 60);
-  --accent: oklch(0.27 0.005 60);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.717 0.123 185);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.21 0.005 60);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.717 0.123 185);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.27 0.005 60);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.717 0.123 185);
+    /* ---- Command Center canvas (cool charcoal, slight blue undertone) ---- */
+    --bg-0: oklch(0.165 0.012 256);   /* app base / deepest */
+    --bg-1: oklch(0.198 0.013 256);   /* panels */
+    --bg-2: oklch(0.232 0.014 256);   /* raised / hover */
+    --bg-3: oklch(0.272 0.015 256);   /* inputs / active */
+    --line:      oklch(0.305 0.014 256);
+    --line-soft: oklch(0.252 0.012 256);
+
+    /* ---- text ---- */
+    --text:   oklch(0.962 0.004 256);
+    --text-2: oklch(0.760 0.008 256);
+    --text-3: oklch(0.628 0.010 256);   /* raised from .580 for 24h-shift readability */
+    --text-4: oklch(0.450 0.010 256);
+
+    /* ---- brand accent (signal cyan, themeable via Tweaks panel) ----
+       Named --brand (not --accent) to avoid colliding with shadcn's --accent,
+       which is the "subtle hover bg" token. */
+    --brand:      oklch(0.795 0.115 209);
+    --brand-2:    oklch(0.700 0.110 209);  /* hover */
+    --brand-dim:  oklch(0.500 0.075 209);  /* gradient end */
+    --brand-fg:   oklch(0.180 0.020 240);  /* text on brand fill */
+    --brand-soft: oklch(from var(--brand) l c h / 0.13);
+    --brand-line: oklch(from var(--brand) l c h / 0.36);
+
+    /* ---- shadcn semantic aliases ----
+       Every shadcn primitive (Card, Dialog, Input, Button, etc.) reads
+       these names. Aliasing them to the Command Center canvas means the
+       new shell visually matches the design without touching shadcn
+       components individually. Phase 2/3 can replace bespoke surfaces
+       progressively; Phase 1 lets them inherit. */
+    --background: var(--bg-0);
+    --foreground: var(--text);
+    --card: var(--bg-1);
+    --card-foreground: var(--text);
+    --popover: var(--bg-1);
+    --popover-foreground: var(--text);
+    --primary: var(--brand);
+    --primary-foreground: var(--brand-fg);
+    --secondary: var(--bg-2);
+    --secondary-foreground: var(--text);
+    --muted: var(--bg-2);
+    --muted-foreground: var(--text-3);
+    --accent: var(--bg-2);              /* shadcn's hover-bg accent (not the brand) */
+    --accent-foreground: var(--text);
+    --destructive: var(--sev-crit);
+    --border: var(--line);
+    --input: var(--bg-3);
+    --ring: var(--brand);
+    --chart-1: var(--brand);
+    --chart-2: var(--sev-info);
+    --chart-3: var(--sev-med);
+    --chart-4: var(--sev-high);
+    --chart-5: var(--sev-crit);
+    --sidebar: var(--bg-1);
+    --sidebar-foreground: var(--text);
+    --sidebar-primary: var(--brand);
+    --sidebar-primary-foreground: var(--brand-fg);
+    --sidebar-accent: var(--brand-soft);
+    --sidebar-accent-foreground: var(--text);
+    --sidebar-border: var(--line);
+    --sidebar-ring: var(--brand);
 }
 
 @layer base {
@@ -182,4 +303,121 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ============================================================================
+   Command Center utility classes — typography, panels, status dots, sev tint.
+   Components reach for these instead of stitching multiple Tailwind utilities
+   when the visual is well-known and reused (eyebrow labels, panel chrome,
+   live-pulse dots, severity row tinting).
+   ========================================================================= */
+
+.h-page {
+    font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0;
+}
+
+.eyebrow {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: oklch(0.685 0.012 256);
+    font-weight: 500;
+}
+
+.sub {
+    color: var(--text-3);
+    font-size: 12.5px;
+}
+
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* Panel — the standard raised surface of every Command Center pane. */
+.panel {
+    background: var(--bg-1);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg);
+}
+.panel-pad { padding: var(--pad); }
+
+/* Status dot — 7px circle, ok/warn/down get a 0 0 8px glow, idle does not.
+   Add .live to pulse opacity 1↔0.35 over 1.8s. */
+.dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 9999px;
+    background: var(--idle);
+    flex-shrink: 0;
+}
+.dot.ok   { background: var(--ok);   box-shadow: 0 0 8px var(--ok); }
+.dot.warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+.dot.down { background: var(--down); box-shadow: 0 0 8px var(--down); }
+.dot.idle { background: var(--idle); box-shadow: none; }
+@keyframes live-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.35; }
+}
+.dot.live { animation: live-pulse 1.8s ease-in-out infinite; }
+
+/* Severity pill — mono 10px/600, uppercase, severity colour + soft bg.
+   Component layer renders these via the <Sev/> component; class kept here
+   so consumers without the component (status banners, chips) can use it. */
+.sev {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: var(--r-xs);
+    display: inline-block;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+.sev.crit { color: var(--sev-crit); background: var(--sev-crit-s); }
+.sev.high { color: var(--sev-high); background: var(--sev-high-s); }
+.sev.med  { color: var(--sev-med);  background: var(--sev-med-s); }
+.sev.low  { color: var(--sev-low);  background: var(--sev-low-s); }
+.sev.info { color: var(--sev-info); background: var(--sev-info-s); }
+
+/* Sevtint — left-edge severity strip on table rows. The component wraps a
+   <tr> in a class like `sevtint sevtint-high`; the strip is a left border. */
+.sevtint { position: relative; }
+.sevtint::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: transparent;
+}
+.sevtint-crit::before { background: var(--sev-crit); }
+.sevtint-high::before { background: var(--sev-high); }
+.sevtint-med::before  { background: var(--sev-med); }
+.sevtint-low::before  { background: var(--sev-low); }
+.sevtint-info::before { background: var(--sev-info); }
+
+/* Chip — 21px mono pill used for tags, TLP markers, environment chips. */
+.chip {
+    height: 21px;
+    padding: 0 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: var(--bg-2);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-sm);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-2);
+    white-space: nowrap;
+}
+.chip-brand {
+    background: var(--brand-soft);
+    border-color: var(--brand-line);
+    color: var(--brand);
 }

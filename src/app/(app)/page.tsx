@@ -1,405 +1,606 @@
 'use client';
 
+/**
+ * Command — the triage-first overview screen.
+ *
+ * Layout (Command Center spec):
+ *   1. Page head    — h1 "Threat Command" + live status + window segmented + feed health chip
+ *   2. KPI strip    — Indicators / Vulnerabilities / Threat actors / Active feeds, each with sparkline
+ *   3. Row 2 (3-col): Priority triage (spans 2) + Severity distribution
+ *   4. Row 3 (3-col): Indicator types + ATT&CK coverage heatmap + Trending tags
+ *   5. Row 4 (2-col): Actor watchlist + Latest intel pulses
+ *
+ * Data sources:
+ *   - platform.stats / landscape / sparklines / mitreCoverage
+ *   - platform.activeActors / trendingTags / feedMonitoring
+ *   - iocs.list (priority triage placeholder — top critical IOCs as
+ *     stand-in for the real events stream; flagged for Phase 2)
+ *   - pulses.list (latest intel)
+ */
+
 import useSWR from 'swr';
 import Link from 'next/link';
-import { platform } from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Flame, AlertCircle, CheckCircle2, MinusCircle } from 'lucide-react';
-import { cn, severityTone, relTime } from '@/lib/utils';
+import { useState } from 'react';
+import {
+    platform, iocs, pulses as pulsesApi,
+} from '@/lib/api';
+import {
+    Bolt, ShieldAlert, Crosshair, Grid as GridIcon, Flame, Zap,
+    ArrowUp, ArrowDown, ChevronRight,
+} from 'lucide-react';
+import { cn, relTime } from '@/lib/utils';
 import { Sparkline, type SparklineTone } from '@/components/sparkline';
+import { Sev, normalizeSeverity, SEV_RANK, type Severity } from '@/components/cc/sev';
+import { StatusDot } from '@/components/cc/status-dot';
+import { PanelHead } from '@/components/cc/panel-head';
+import { Segmented } from '@/components/cc/segmented';
 
 const fmt = (n: number | null | undefined) =>
     n == null ? '—' : n.toLocaleString('en-US');
 
-export default function OverviewPage() {
-    const { data: stats } = useSWR('overview:stats', () => platform.stats());
-    const { data: health } = useSWR('overview:health', () => platform.health());
-    const { data: coverage } = useSWR('overview:mitre', () => platform.mitreCoverage());
-    const { data: actors } = useSWR('overview:actors', () => platform.activeActors(6));
-    const { data: landscape } = useSWR('overview:landscape', () => platform.landscape());
-    const { data: tags } = useSWR('overview:trending', () => platform.trendingTags());
-    const { data: feeds } = useSWR('overview:feeds', () => platform.feedMonitoring());
-    // 7-day daily-bucketed trends for the four KPI tile sparklines.
-    // Refresh every minute — the underlying data only moves on feed-sync ticks.
-    const { data: sparks } = useSWR(
-        'overview:sparklines',
-        () => platform.sparklines(7),
-        { refreshInterval: 60_000 },
-    );
+type WindowKey = '24H' | '7D' | '30D';
 
-    // Tri-state service classification. OpenSearch reports cluster status
-    // as green/yellow/red — `yellow` is the *expected* state for a single-node
-    // deployment (no peer to host replica shards), but on a multi-node cluster
-    // it's a real signal. Splitting `degraded` out from `down` lets the
-    // dashboard show that honestly without lying in either direction.
-    const healthList = Object.entries(health?.services ?? {});
-    const classify = (status: string): 'up' | 'degraded' | 'down' => {
-        const s = status.toLowerCase();
-        if (['healthy', 'up', 'connected', 'green', 'online', 'ok'].includes(s)) return 'up';
-        if (['yellow', 'degraded', 'warning', 'partial'].includes(s)) return 'degraded';
-        return 'down';
-    };
-    const buckets = healthList.reduce(
-        (acc, [name, v]) => {
-            const state = classify(v?.status ?? '');
-            acc[state].push(name);
-            return acc;
-        },
-        { up: [] as string[], degraded: [] as string[], down: [] as string[] },
-    );
-    const dotTone =
-        buckets.down.length > 0 ? 'bg-rose-500'
-        : buckets.degraded.length > 0 ? 'bg-amber-500'
-        : healthList.length > 0 ? 'bg-emerald-500'
-        : 'bg-muted-foreground';
-    const healthSummary = (() => {
-        if (healthList.length === 0) return 'connecting';
-        const parts: string[] = [];
-        if (buckets.up.length) parts.push(`${buckets.up.length} up`);
-        if (buckets.degraded.length) parts.push(`${buckets.degraded.length} degraded`);
-        if (buckets.down.length) parts.push(`${buckets.down.length} down`);
-        return parts.join(' · ');
-    })();
-    // Hover hint lists which service is in which non-up state — quick triage
-    // without having to open the admin page.
-    const healthTooltip = healthList.length === 0
-        ? ''
-        : [
-            buckets.degraded.length ? `Degraded: ${buckets.degraded.join(', ')}` : '',
-            buckets.down.length ? `Down: ${buckets.down.join(', ')}` : '',
-        ].filter(Boolean).join('\n') || 'All services healthy';
+const WINDOW_OPTIONS = [
+    { value: '24H', label: '24H' },
+    { value: '7D',  label: '7D'  },
+    { value: '30D', label: '30D' },
+] as const;
 
-    const counts = stats?.counts;
-    const tactics = coverage?.tactics ?? [];
-    const maxTacticCount = tactics.reduce((m, t) => Math.max(m, t.techniqueCount), 1);
+const SEV_BAR_BG: Record<Severity, string> = {
+    crit: 'bg-sev-crit',
+    high: 'bg-sev-high',
+    med:  'bg-sev-med',
+    low:  'bg-sev-low',
+    info: 'bg-sev-info',
+};
 
-    const iocTypes = landscape?.iocTypeDistribution ?? [];
-    const maxTypeCount = iocTypes.reduce((m, t) => Math.max(m, t.count), 1);
+export default function CommandPage() {
+    const [windowSel, setWindowSel] = useState<WindowKey>('7D');
 
-    const sevDist = landscape?.severityDistribution ?? [];
-    const sevTotal = sevDist.reduce((s, x) => s + x.count, 0);
-
-    const topSources = landscape?.topSources ?? [];
-    const maxSourceCount = topSources.reduce((m, s) => Math.max(m, s.count), 1);
+    const { data: stats }     = useSWR('cc:stats',     () => platform.stats());
+    const { data: landscape } = useSWR('cc:landscape', () => platform.landscape());
+    const { data: sparks }    = useSWR('cc:sparks',    () => platform.sparklines(7), { refreshInterval: 60_000 });
+    const { data: coverage }  = useSWR('cc:mitre',     () => platform.mitreCoverage());
+    const { data: actors }    = useSWR('cc:actors',    () => platform.activeActors(6));
+    const { data: trending }  = useSWR('cc:trending',  () => platform.trendingTags());
+    const { data: feeds }     = useSWR('cc:feeds',     () => platform.feedMonitoring());
+    const { data: pulses }    = useSWR('cc:pulses',    () => pulsesApi.list({ pageSize: 5 }));
+    const { data: triage }    = useSWR('cc:triage',    () => iocs.list({ severity: 'critical', pageSize: 5 }));
 
     const feedList = feeds?.feeds ?? [];
+    const feedHealthy   = feedList.filter(f => f.health === 'healthy').length;
+    const feedDegraded  = feedList.filter(f => f.health === 'warning').length;
+    const feedDown      = feedList.filter(f => f.health === 'error').length;
+    const feedHealthDot = feedDown ? 'down' : feedDegraded ? 'warn' : 'ok';
+    const feedHealthLabel =
+        feedDown      ? `${feedHealthy}/${feedList.length} up · ${feedDown} down`
+      : feedDegraded  ? `${feedHealthy}/${feedList.length} up · ${feedDegraded} degraded`
+                      : `${feedHealthy} feeds healthy`;
 
     return (
-        <div className="space-y-4">
-            {/* ── Header ─────────────────────────────────────────────────────── */}
-            <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="space-y-3 motion-enter">
+            {/* ── Page head ────────────────────────────────────────────── */}
+            <header className="flex items-end justify-between gap-4 flex-wrap">
                 <div>
-                    <h1 className="text-3xl font-semibold tracking-tight">Threat overview</h1>
-                    <p className="text-sm text-muted-foreground mt-1">
-                        Live snapshot · {landscape?.period ?? '7d'} window
-                    </p>
+                    <h1 className="h-page">Threat Command</h1>
+                    <div className="sub flex items-center gap-1.5 mt-1">
+                        <StatusDot status="ok" live />
+                        Live snapshot · rolling {windowSel === '24H' ? '24-hour' : windowSel === '30D' ? '30-day' : '7-day'} window
+                    </div>
                 </div>
-                <div className="flex items-center gap-2" title={healthTooltip}>
-                    <span className={cn('inline-block size-1.5 rounded-full', dotTone)} />
-                    <span className="text-[11px] text-muted-foreground tabular-nums">
-                        {healthSummary}
-                    </span>
+                <div className="flex items-center gap-3">
+                    <Segmented<WindowKey>
+                        options={WINDOW_OPTIONS}
+                        value={windowSel}
+                        onChange={setWindowSel}
+                    />
+                    {feedList.length > 0 && (
+                        <Link
+                            href="/feeds"
+                            className="flex items-center gap-2 px-2.5 h-7 rounded-md border border-line-soft bg-bg-1 hover:bg-bg-2 transition-colors text-[11px]"
+                            title="Feed health"
+                        >
+                            <StatusDot status={feedHealthDot} />
+                            <span className="text-text-2 tabular-nums">{feedHealthLabel}</span>
+                        </Link>
+                    )}
                 </div>
-            </div>
+            </header>
 
-            {/* ── KPI strip — compact, single row ────────────────────────────── */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border rounded-md overflow-hidden border">
-                <KpiCell label="Indicators" value={fmt(counts?.iocs)} href="/iocs"
-                    sub={landscape ? `${fmt(landscape.iocs.high)} high · ${fmt(landscape.iocs.critical)} crit` : undefined}
-                    spark={sparks?.iocs} sparkTone="success" sparkLabel="New IOCs per day, last 7 days" />
-                <KpiCell label="Vulnerabilities" value={fmt(counts?.vulnerabilities)} href="/vulnerabilities"
-                    sub={landscape ? `${fmt(landscape.vulnerabilities.high)} high · ${fmt(landscape.vulnerabilities.critical)} crit` : undefined}
-                    spark={sparks?.vulnerabilities} sparkTone="warning" sparkLabel="New vulnerabilities per day, last 7 days" />
-                <KpiCell label="Threat actors" value={fmt(counts?.threatActors)} href="/actors"
+            {/* ── KPI strip ────────────────────────────────────────────── */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <KpiTile
+                    href="/iocs"
+                    eyebrow="Indicators"
+                    value={stats?.counts.iocs}
+                    sparkData={sparks?.iocs}
+                    sparkTone="brand"
+                    delta={deltaPct(sparks?.iocs)}
+                    sub={landscape
+                        ? `${fmt(landscape.iocs.high)} high · ${fmt(landscape.iocs.critical)} crit`
+                        : undefined}
+                />
+                <KpiTile
+                    href="/vulnerabilities"
+                    eyebrow="Vulnerabilities"
+                    value={stats?.counts.vulnerabilities}
+                    sparkData={sparks?.vulnerabilities}
+                    sparkTone="sev-high"
+                    delta={deltaPct(sparks?.vulnerabilities)}
+                    sub={landscape
+                        ? `${fmt(landscape.vulnerabilities.high)} high · ${fmt(landscape.vulnerabilities.critical)} crit`
+                        : undefined}
+                />
+                <KpiTile
+                    href="/actors"
+                    eyebrow="Threat actors"
+                    value={stats?.counts.threatActors}
+                    sparkData={sparks?.threatActors}
+                    sparkTone="sev-info"
+                    delta={deltaPct(sparks?.threatActors)}
                     sub={actors ? `${actors.actors.length} active this week` : undefined}
-                    spark={sparks?.threatActors} sparkTone="muted" sparkLabel="Actors observed per day, last 7 days" />
-                <KpiCell label="Active feeds" value={feedList.length > 0 ? fmt(feedList.length) : '—'} href="/feeds"
-                    sub={feedList.length > 0 ? `${feedList.filter(f => f.health === 'healthy').length} healthy` : undefined}
-                    spark={sparks?.feedSyncs} sparkTone="success" sparkLabel="Successful feed-sync runs per day, last 7 days" />
-            </div>
-
-            {/* ── Row 1: Type + Severity distribution ────────────────────────── */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <Panel title="Indicator type distribution" subtitle={landscape ? `${fmt(landscape.iocs.total)} total` : undefined}>
-                    {iocTypes.length === 0 ? (
-                        <SkeletonRows />
-                    ) : (
-                        <div className="space-y-1.5 motion-enter">
-                            {iocTypes.map(t => (
-                                <BarRow
-                                    key={t.type}
-                                    label={t.type}
-                                    count={t.count}
-                                    max={maxTypeCount}
-                                    href={`/iocs?type=${encodeURIComponent(t.type)}`}
-                                />
-                            ))}
-                        </div>
-                    )}
-                </Panel>
-
-                <Panel title="Severity distribution" subtitle={sevTotal ? `${fmt(sevTotal)} indicators` : undefined}>
-                    {sevDist.length === 0 ? (
-                        <SkeletonRows />
-                    ) : (
-                        <div className="space-y-1.5 motion-enter">
-                            {sevDist
-                                .slice()
-                                .sort((a, b) => sevRank(b.severity) - sevRank(a.severity))
-                                .map(s => (
-                                    <BarRow
-                                        key={s.severity ?? 'unscored'}
-                                        label={s.severity ?? 'unscored'}
-                                        count={s.count}
-                                        max={sevTotal}
-                                        href={`/iocs?severity=${encodeURIComponent(s.severity ?? '')}`}
-                                        tone={severityTone(s.severity)}
-                                    />
-                                ))}
-                        </div>
-                    )}
-                </Panel>
-            </div>
-
-            {/* ── Row 2: ATT&CK / Tags / Actor watchlist (3-up) ───────────────── */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <Panel title="ATT&CK coverage" subtitle={coverage ? `${tactics.length} tactics · ${coverage.totalTechniques} techniques` : undefined}>
-                    {!coverage ? (
-                        <SkeletonRows count={8} />
-                    ) : (
-                        <div className="space-y-1.5 motion-enter">
-                            {tactics.slice(0, 8).map(t => (
-                                <div key={t.mitreId} className="grid grid-cols-[42px_1fr_28px] sm:grid-cols-[44px_1fr_60px_28px] gap-2 items-center text-[12px]">
-                                    <span className="font-mono text-[10px] text-muted-foreground">{t.mitreId}</span>
-                                    <span className="truncate">{t.name}</span>
-                                    {/* Desktop-only inline bar; mobile drops it to keep the
-                                        name readable in the tight column. */}
-                                    <div className="hidden sm:block h-1 rounded-full bg-muted overflow-hidden">
-                                        <div className="h-full bg-foreground/70" style={{ width: `${(t.techniqueCount / maxTacticCount) * 100}%` }} />
-                                    </div>
-                                    <span className="text-[10px] text-muted-foreground tabular-nums text-right">{t.techniqueCount}</span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </Panel>
-
-                <Panel title="Trending tags" subtitle={tags ? `${tags.length} tags` : undefined}>
-                    {!tags ? (
-                        <SkeletonRows count={8} />
-                    ) : tags.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">No tags surfaced yet.</p>
-                    ) : (
-                        <div className="space-y-1 motion-enter">
-                            {tags.slice(0, 8).map(t => (
-                                <Link
-                                    key={t.tag}
-                                    href={`/iocs?q=${encodeURIComponent(t.tag)}`}
-                                    className="flex items-center justify-between gap-2 px-1 py-1 -mx-1 rounded hover:bg-accent/50 transition-colors"
-                                >
-                                    <span className="flex items-center gap-1.5 min-w-0">
-                                        {t.hot && <Flame className="size-3 text-brand shrink-0" />}
-                                        <span className="text-[12px] truncate font-mono">{t.tag}</span>
-                                    </span>
-                                    <span className="text-[10px] text-muted-foreground tabular-nums">{fmt(t.count)}</span>
-                                </Link>
-                            ))}
-                        </div>
-                    )}
-                </Panel>
-
-                <Panel title="Threat actor watchlist" subtitle={actors ? `${actors.actors.length} ranked by activity score` : undefined}>
-                    {!actors ? (
-                        <SkeletonRows count={6} />
-                    ) : actors.actors.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">No active actors.</p>
-                    ) : (
-                        <div className="divide-y motion-enter -mx-3">
-                            {actors.actors.slice(0, 6).map(a => (
-                                <Link
-                                    key={a.id}
-                                    href={`/actors/${a.id}`}
-                                    title={`Activity score ${a.score} = pulses ${a.breakdown.pulses}×3 + ttps ${a.breakdown.ttps}×2 + sophistication ${a.breakdown.sophistication} + recency ${a.breakdown.recency}`}
-                                    className="grid grid-cols-[1fr_36px_24px_72px] gap-2 items-center px-3 py-1.5 hover:bg-accent/50 transition-colors"
-                                >
-                                    <div className="min-w-0">
-                                        <div className="text-[12px] font-medium truncate">{a.name}</div>
-                                        {a.aliases.length > 0 && (
-                                            <div className="text-[10px] text-muted-foreground truncate">
-                                                aka {a.aliases.slice(0, 2).join(' · ')}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <span className="text-[10px] font-mono text-muted-foreground">
-                                        {a.country ? a.country.slice(0, 3).toUpperCase() : '—'}
-                                    </span>
-                                    <span className="text-[11px] font-mono tabular-nums text-right text-muted-foreground/90" aria-label="activity score">
-                                        {a.score}
-                                    </span>
-                                    <Badge variant="outline" className="text-[9px] capitalize justify-self-end">
-                                        {a.sophistication ?? '—'}
-                                    </Badge>
-                                </Link>
-                            ))}
-                        </div>
-                    )}
-                </Panel>
-            </div>
-
-            {/* ── Row 3: Sources + Feed health (2-up wide) ───────────────────── */}
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-                <Panel title="Top sources" className="lg:col-span-2" subtitle="By indicator volume">
-                    {topSources.length === 0 ? (
-                        <SkeletonRows count={4} />
-                    ) : (
-                        <div className="space-y-1.5 motion-enter">
-                            {topSources.slice(0, 6).map(s => (
-                                <BarRow
-                                    key={s.source}
-                                    label={s.source}
-                                    count={s.count}
-                                    max={maxSourceCount}
-                                    href={`/iocs?source=${encodeURIComponent(s.source)}`}
-                                    barTone="bg-blue-500/70"
-                                />
-                            ))}
-                        </div>
-                    )}
-                </Panel>
-
-                <Panel title="Feed health" subtitle={feedList.length ? `${feedList.length} ingesting sources` : undefined} className="lg:col-span-3">
-                    {feedList.length === 0 ? (
-                        <SkeletonRows count={6} />
-                    ) : (
-                        <div className="divide-y motion-enter -mx-3 max-h-65 overflow-y-auto">
-                            {feedList.map(f => <FeedRow key={f.feed} feed={f} />)}
-                        </div>
-                    )}
-                </Panel>
-            </div>
-        </div>
-    );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Primitives                                                                 */
-/* -------------------------------------------------------------------------- */
-
-function Panel({
-    title, subtitle, children, className,
-}: { title: string; subtitle?: string; children: React.ReactNode; className?: string }) {
-    return (
-        <Card className={cn('overflow-hidden', className)}>
-            <CardHeader className="pb-2 pt-3 px-3 flex-row items-baseline justify-between">
-                <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    {title}
-                </CardTitle>
-                {subtitle && (
-                    <span className="text-[10px] text-muted-foreground tabular-nums">{subtitle}</span>
-                )}
-            </CardHeader>
-            <CardContent className="pt-1 pb-3 px-3">{children}</CardContent>
-        </Card>
-    );
-}
-
-function KpiCell({
-    label, value, href, sub, spark, sparkTone = 'success', sparkLabel,
-}: {
-    label: string;
-    value: string;
-    href: string;
-    sub?: string;
-    /** 7-day series for the trailing sparkline. Tile renders without it if omitted. */
-    spark?: number[];
-    sparkTone?: SparklineTone;
-    sparkLabel?: string;
-}) {
-    return (
-        <Link href={href} className="bg-card hover:bg-accent/30 transition-colors px-4 py-3 block">
-            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
-                {label}
-            </p>
-            {/*
-              Two-column layout when there's a sparkline — value/sub on the left,
-              chart on the right — falls back to the original single-column layout
-              when the spark prop is omitted so the tile degrades gracefully if
-              the /v1/stats/sparklines call is still in flight or errored.
-            */}
-            <div className="flex items-end justify-between gap-3 mt-1">
-                <div className="min-w-0">
-                    <p key={value} className="text-2xl font-semibold tracking-tight tabular-nums motion-enter">{value}</p>
-                    {sub && (
-                        <p className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">{sub}</p>
-                    )}
-                </div>
-                {spark && spark.length > 0 && (
-                    <Sparkline data={spark} tone={sparkTone} label={sparkLabel} />
-                )}
-            </div>
-        </Link>
-    );
-}
-
-function BarRow({
-    label, count, max, href, tone, barTone,
-}: { label: string; count: number; max: number; href?: string; tone?: string; barTone?: string }) {
-    const pct = max > 0 ? (count / max) * 100 : 0;
-    const body = (
-        <div className="grid grid-cols-[80px_1fr_44px] sm:grid-cols-[110px_1fr_56px] gap-2 sm:gap-3 items-center text-[12px]">
-            <span className={cn('font-mono text-[11px] truncate uppercase tracking-wide', tone)}>{label}</span>
-            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                <div
-                    className={cn('h-full transition-all', barTone ?? 'bg-foreground/70')}
-                    style={{ width: `${pct}%` }}
+                />
+                <KpiTile
+                    href="/feeds"
+                    eyebrow="Active feeds"
+                    value={feedList.length || undefined}
+                    sparkData={sparks?.feedSyncs}
+                    sparkTone="ok"
+                    delta={deltaPct(sparks?.feedSyncs)}
+                    sub={feedList.length > 0 ? `${feedHealthy} healthy` : undefined}
                 />
             </div>
-            <span className="text-[11px] text-muted-foreground tabular-nums text-right">{count.toLocaleString()}</span>
+
+            {/* ── Row 2: Triage + Severity ─────────────────────────────── */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                <div className="lg:col-span-2">
+                    <TriagePanel triage={triage?.items ?? []} />
+                </div>
+                <SeverityPanel landscape={landscape ?? null} />
+            </div>
+
+            {/* ── Row 3: Types · ATT&CK · Trending ─────────────────────── */}
+            <div className="grid grid-cols-1 lg:grid-cols-[1.05fr_1.15fr_1fr] gap-3">
+                <IndicatorTypesPanel
+                    types={landscape?.iocTypeDistribution ?? []}
+                    total={landscape?.iocs.total ?? 0}
+                />
+                <AttackHeatmap tactics={coverage?.tactics ?? []} />
+                <TrendingTagsPanel tags={trending ?? []} />
+            </div>
+
+            {/* ── Row 4: Watchlist + Latest pulses ─────────────────────── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <ActorWatchlistPanel actors={actors?.actors ?? []} />
+                <LatestPulsesPanel pulses={pulses?.items ?? []} />
+            </div>
         </div>
     );
-    return href ? (
-        <Link href={href} className="block px-1 -mx-1 py-0.5 rounded hover:bg-accent/50 transition-colors">
-            {body}
+}
+
+/* ============================================================================
+   KPI tile — eyebrow, delta chip, big number, sparkline, sub line.
+   ========================================================================= */
+
+function KpiTile({
+    href, eyebrow, value, sparkData, sparkTone, delta, sub,
+}: {
+    href: string;
+    eyebrow: string;
+    value: number | null | undefined;
+    sparkData?: number[];
+    sparkTone: SparklineTone;
+    delta: { sign: 'up' | 'down' | 'flat'; pct: number } | null;
+    sub?: string;
+}) {
+    return (
+        <Link
+            href={href}
+            className="panel panel-pad flex flex-col gap-2 hover:bg-bg-2 transition-colors"
+        >
+            <div className="flex items-center justify-between gap-2">
+                <span className="eyebrow">{eyebrow}</span>
+                {delta && delta.sign !== 'flat' && (
+                    <span
+                        className={cn(
+                            'inline-flex items-center gap-0.5 font-mono text-[10.5px] tnum px-1.5 py-0.5 rounded',
+                            delta.sign === 'up'
+                                ? 'text-ok bg-[oklch(from_var(--ok)_l_c_h_/_0.12)]'
+                                : 'text-sev-high bg-sev-high-soft',
+                        )}
+                    >
+                        {delta.sign === 'up' ? <ArrowUp className="size-2.5" /> : <ArrowDown className="size-2.5" />}
+                        {delta.pct.toFixed(1)}%
+                    </span>
+                )}
+            </div>
+            <div className="flex items-end justify-between gap-3 min-w-0">
+                <div className="font-mono text-[28px] leading-none font-semibold tnum truncate">
+                    {fmt(value ?? null)}
+                </div>
+                {sparkData && (
+                    <Sparkline data={sparkData} tone={sparkTone} variant="gradient" width={78} height={30} />
+                )}
+            </div>
+            {sub && <div className="text-[12px] text-text-3 truncate">{sub}</div>}
         </Link>
-    ) : <div className="px-1 -mx-1 py-0.5">{body}</div>;
+    );
 }
 
-function FeedRow({ feed: f }: { feed: { feed: string; health: string; status: string; lastSync: string | null; itemsProcessed: number; successRate: number } }) {
-    // Backend (/v1/monitoring/feeds) emits 'healthy' | 'warning' | 'critical'.
-    // Previously the dashboard checked for 'error', which never matched, so
-    // critical feeds rendered amber (warning) instead of red.
-    const isCritical = f.health === 'critical' || f.health === 'error';
-    const HealthIcon = f.health === 'healthy' ? CheckCircle2 : isCritical ? AlertCircle : MinusCircle;
-    const tone =
-        f.health === 'healthy' ? 'text-emerald-500'
-        : isCritical ? 'text-red-500'
-        : 'text-amber-500';
+/** Naive delta as (last bucket vs avg of preceding) for the KPI chip. */
+function deltaPct(series: number[] | undefined): { sign: 'up' | 'down' | 'flat'; pct: number } | null {
+    if (!series || series.length < 2) return null;
+    const last = series[series.length - 1];
+    const priorSlice = series.slice(0, -1);
+    const priorAvg = priorSlice.reduce((s, x) => s + x, 0) / Math.max(priorSlice.length, 1);
+    if (priorAvg === 0 && last === 0) return { sign: 'flat', pct: 0 };
+    if (priorAvg === 0) return { sign: 'up', pct: 100 };
+    const pct = ((last - priorAvg) / priorAvg) * 100;
+    if (Math.abs(pct) < 0.5) return { sign: 'flat', pct: 0 };
+    return { sign: pct > 0 ? 'up' : 'down', pct: Math.abs(pct) };
+}
+
+/* ============================================================================
+   Priority triage — items needing an analyst decision now.
+   Phase 1 uses critical IOCs as a stand-in; real events/alerts stream
+   wiring lands in Phase 3 (per the design brief).
+   ========================================================================= */
+
+type TriageIoc = Awaited<ReturnType<typeof iocs.list>>['items'][number];
+
+function TriagePanel({ triage }: { triage: TriageIoc[] }) {
     return (
-        <div className="grid grid-cols-[16px_1fr_70px_64px] gap-3 items-center px-3 py-1.5 text-[12px]">
-            <HealthIcon className={cn('size-3.5 shrink-0', tone)} />
-            <span className="font-mono truncate text-[11px]">{f.feed}</span>
-            <span className="text-[10px] text-muted-foreground tabular-nums text-right">
-                {f.itemsProcessed > 0 ? `${f.itemsProcessed.toLocaleString()} new` : '—'}
-            </span>
-            <span className="text-[10px] text-muted-foreground tabular-nums text-right">
-                {f.lastSync ? relTime(f.lastSync) : '—'}
-            </span>
+        <div className="panel panel-pad">
+            <PanelHead
+                icon={<Bolt className="size-4" />}
+                title="Priority triage"
+                sub={`${triage.length} items need an analyst decision`}
+                right={
+                    <Link href="/iocs?severity=critical" className="text-[12px] text-text-3 hover:text-text inline-flex items-center gap-0.5">
+                        View queue <ChevronRight className="size-3" />
+                    </Link>
+                }
+            />
+            <div className="mt-3 -mx-2">
+                {triage.length === 0 ? (
+                    <div className="px-2 py-6 text-center text-[12.5px] text-text-3">
+                        <StatusDot status="ok" className="mr-2" />
+                        Nothing critical right now. Queue clears as analysts assign verdicts.
+                    </div>
+                ) : (
+                    <ul>
+                        {triage.map(item => {
+                            const sev = normalizeSeverity(item.severity);
+                            const dot = sev === 'crit' ? 'down' : sev === 'high' ? 'warn' : 'idle';
+                            return (
+                                <li key={item.id} className="triage-row group">
+                                    <Link
+                                        href={`/iocs/${item.id}`}
+                                        className="grid grid-cols-[16px_1fr_auto_auto] items-center gap-3 px-2 py-2 rounded hover:bg-bg-2 transition-colors"
+                                    >
+                                        <StatusDot status={dot} />
+                                        <div className="min-w-0">
+                                            <div className="font-mono text-[13px] truncate">{item.value}</div>
+                                            <div className="text-[11px] text-text-3 flex items-center gap-2 mt-0.5">
+                                                <span className="uppercase tracking-wider">{item.type}</span>
+                                                <span>·</span>
+                                                <span>{item.source}</span>
+                                                {item.threatType && <>
+                                                    <span>·</span>
+                                                    <span className="truncate">{item.threatType}</span>
+                                                </>}
+                                            </div>
+                                        </div>
+                                        <Sev level={sev} short />
+                                        <span className="text-[11px] text-text-4 font-mono tnum">
+                                            {relTime(item.lastSeen ?? item.firstSeen ?? item.createdAt ?? '')}
+                                        </span>
+                                    </Link>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
+            </div>
         </div>
     );
 }
 
-function SkeletonRows({ count = 5 }: { count?: number }) {
+/* ============================================================================
+   Severity distribution — spectrum bar + per-severity rows.
+   ========================================================================= */
+
+function SeverityPanel({ landscape }: { landscape: Awaited<ReturnType<typeof platform.landscape>> | null }) {
+    const dist = landscape?.severityDistribution ?? [];
+    const buckets = dist
+        .filter(d => d.severity != null)
+        .map(d => ({ sev: normalizeSeverity(d.severity), count: d.count }))
+        .sort((a, b) => SEV_RANK[b.sev] - SEV_RANK[a.sev]);
+
+    const total = buckets.reduce((s, b) => s + b.count, 0);
+    const max   = buckets.reduce((m, b) => Math.max(m, b.count), 1);
+
     return (
-        <div className="space-y-1.5">
-            {Array.from({ length: count }).map((_, i) => <Skeleton key={i} className="h-5" />)}
+        <div className="panel panel-pad">
+            <PanelHead
+                icon={<ShieldAlert className="size-4" />}
+                title="Severity distribution"
+                sub={`${fmt(total)} active indicators`}
+            />
+            {/* Stacked spectrum bar */}
+            {total > 0 && (
+                <div className="mt-3 flex h-2 w-full overflow-hidden rounded">
+                    {buckets.map(b => (
+                        <div
+                            key={b.sev}
+                            className={SEV_BAR_BG[b.sev]}
+                            style={{ width: `${(b.count / total) * 100}%` }}
+                            title={`${b.sev}: ${b.count}`}
+                        />
+                    ))}
+                </div>
+            )}
+            {/* Per-severity rows */}
+            <ul className="mt-3 space-y-1.5">
+                {buckets.length === 0 ? (
+                    <li className="text-[12.5px] text-text-3">No severity data yet.</li>
+                ) : buckets.map(b => (
+                    <li key={b.sev} className="grid grid-cols-[74px_1fr_auto] items-center gap-2">
+                        <Sev level={b.sev} />
+                        <div className="h-1.5 bg-bg-3 rounded-full overflow-hidden">
+                            <div
+                                className={cn('h-full rounded-full', SEV_BAR_BG[b.sev])}
+                                style={{ width: `${(b.count / max) * 100}%` }}
+                            />
+                        </div>
+                        <span className="font-mono text-[12px] tnum text-text-2 w-[60px] text-right">
+                            {fmt(b.count)}
+                        </span>
+                    </li>
+                ))}
+            </ul>
         </div>
     );
 }
 
-const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'info', 'unscored', null] as const;
-function sevRank(s: string | null): number {
-    const idx = SEVERITY_ORDER.indexOf(s as typeof SEVERITY_ORDER[number]);
-    return idx === -1 ? 99 : SEVERITY_ORDER.length - idx;
+/* ============================================================================
+   Indicator types — horizontal bars with brand gradient.
+   ========================================================================= */
+
+function IndicatorTypesPanel({
+    types, total,
+}: {
+    types: Array<{ type: string; count: number }>;
+    total: number;
+}) {
+    const top = types.slice(0, 9);
+    const max = top.reduce((m, t) => Math.max(m, t.count), 1);
+    return (
+        <div className="panel panel-pad">
+            <PanelHead
+                icon={<Crosshair className="size-4" />}
+                title="Indicator types"
+                sub={total ? `${fmt(total)} indicators` : undefined}
+            />
+            <ul className="mt-3 space-y-1.5">
+                {top.length === 0 ? (
+                    <li className="text-[12.5px] text-text-3">No data.</li>
+                ) : top.map((t, i) => {
+                    const opacity = 1 - (i * 0.08);
+                    return (
+                        <li key={t.type} className="grid grid-cols-[96px_1fr_auto] items-center gap-2">
+                            <span className="font-mono text-[11px] uppercase tracking-wider text-text-3 truncate">{t.type}</span>
+                            <div className="h-1.5 bg-bg-3 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full rounded-full"
+                                    style={{
+                                        width: `${(t.count / max) * 100}%`,
+                                        background: `linear-gradient(90deg, var(--brand-dim), var(--brand))`,
+                                        opacity: Math.max(0.4, opacity),
+                                    }}
+                                />
+                            </div>
+                            <span className="font-mono text-[12px] tnum text-text-2 w-[58px] text-right">
+                                {fmt(t.count)}
+                            </span>
+                        </li>
+                    );
+                })}
+            </ul>
+        </div>
+    );
+}
+
+/* ============================================================================
+   ATT&CK coverage heatmap — 3-col grid of tactic cells.
+   Cell background = accent at alpha 0.12 + ratio*0.85.
+   When ratio >= 0.5 we switch text to dark ink for contrast on the bright fill.
+   ========================================================================= */
+
+function AttackHeatmap({
+    tactics,
+}: {
+    tactics: Array<{ mitreId: string; name: string; shortName: string; techniqueCount: number }>;
+}) {
+    const max = tactics.reduce((m, t) => Math.max(m, t.techniqueCount), 1);
+    return (
+        <div className="panel panel-pad">
+            <PanelHead
+                icon={<GridIcon className="size-4" />}
+                title="ATT&CK coverage"
+                sub={`${tactics.length} tactics tracked`}
+            />
+            <div className="mt-3 grid grid-cols-3 gap-1.5">
+                {tactics.length === 0 ? (
+                    <div className="col-span-3 text-[12.5px] text-text-3">No coverage data.</div>
+                ) : tactics.map(t => {
+                    const ratio = t.techniqueCount / max;
+                    const alpha = 0.12 + ratio * 0.85;
+                    const dark  = ratio >= 0.5;
+                    return (
+                        <div
+                            key={t.mitreId}
+                            className="rounded p-2 min-w-0"
+                            style={{
+                                background: `oklch(from var(--brand) l c h / ${alpha})`,
+                                color: dark ? '#0b0e14' : 'var(--text)',
+                            }}
+                        >
+                            <div
+                                className="font-mono text-[9.5px] tracking-wider"
+                                style={{ color: dark ? 'rgba(11,14,20,.62)' : 'var(--text-3)' }}
+                            >
+                                {t.mitreId}
+                            </div>
+                            <div className="text-[11.5px] truncate font-medium">{t.name}</div>
+                            <div className="text-[16px] font-mono tnum leading-tight mt-0.5">{t.techniqueCount}</div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+/* ============================================================================
+   Trending tags — name + count, hot flag → flame chip.
+   The design calls for a per-tag velocity delta (e.g. "+52%"); the
+   backend's `trendingTags()` returns `{ tag, count, hot }` without a
+   delta number, so we surface the `hot` boolean as a flame chip
+   instead. A real delta is a Phase 3 backend item.
+   ========================================================================= */
+
+function TrendingTagsPanel({
+    tags,
+}: {
+    tags: Array<{ tag: string; count: number; hot: boolean }>;
+}) {
+    return (
+        <div className="panel panel-pad">
+            <PanelHead
+                icon={<Zap className="size-4" />}
+                title="Trending tags"
+                sub={`${tags.length} this window`}
+            />
+            <ul className="mt-3 space-y-1.5">
+                {tags.length === 0 ? (
+                    <li className="text-[12.5px] text-text-3">No tags trending.</li>
+                ) : tags.slice(0, 8).map(t => (
+                    <li key={t.tag} className="flex items-center justify-between gap-2 min-w-0">
+                        <span className="font-mono text-[12.5px] truncate">{t.tag}</span>
+                        <span className="flex items-center gap-2 shrink-0">
+                            {t.hot && (
+                                <span className="text-sev-high inline-flex items-center" title="Hot">
+                                    <Flame className="size-3" />
+                                </span>
+                            )}
+                            <span className="font-mono text-[12px] tnum text-text-2">{fmt(t.count)}</span>
+                        </span>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+}
+
+/* ============================================================================
+   Actor watchlist — top 6 actors by activity score.
+   Score bar = sev-high if score > 70 else brand.
+   ========================================================================= */
+
+type ActiveActor = Awaited<ReturnType<typeof platform.activeActors>>['actors'][number];
+
+function ActorWatchlistPanel({ actors }: { actors: ActiveActor[] }) {
+    const max = actors.reduce((m, a) => Math.max(m, a.score), 1);
+    return (
+        <div className="panel panel-pad">
+            <PanelHead
+                icon={<Bolt className="size-4" />}
+                title="Actor watchlist"
+                sub={`${actors.length} active actors`}
+                right={
+                    <Link href="/actors" className="text-[12px] text-text-3 hover:text-text inline-flex items-center gap-0.5">
+                        All actors <ChevronRight className="size-3" />
+                    </Link>
+                }
+            />
+            <ul className="mt-3 space-y-2">
+                {actors.length === 0 ? (
+                    <li className="text-[12.5px] text-text-3">No active actors this window.</li>
+                ) : actors.map(a => {
+                    const hot = a.score > 70;
+                    return (
+                        <li key={a.id}>
+                            <Link
+                                href={`/actors/${encodeURIComponent(a.id)}`}
+                                className="grid grid-cols-[1fr_auto_auto] items-center gap-3 py-1 hover:text-text transition-colors"
+                            >
+                                <div className="min-w-0">
+                                    <div className="text-[13px] font-medium truncate">{a.name}</div>
+                                    <div className="text-[11px] text-text-3 truncate">
+                                        {[a.primaryMotivation, a.sophistication].filter(Boolean).join(' · ') || '—'}
+                                    </div>
+                                </div>
+                                <div className="w-[120px] h-1.5 bg-bg-3 rounded-full overflow-hidden">
+                                    <div
+                                        className={cn('h-full rounded-full', hot ? 'bg-sev-high' : 'bg-brand')}
+                                        style={{ width: `${(a.score / max) * 100}%` }}
+                                    />
+                                </div>
+                                <span className="font-mono text-[12px] tnum text-text-2 w-[36px] text-right">
+                                    {a.score.toFixed(0)}
+                                </span>
+                            </Link>
+                        </li>
+                    );
+                })}
+            </ul>
+        </div>
+    );
+}
+
+/* ============================================================================
+   Latest intel pulses — 5 most recent.
+   ========================================================================= */
+
+type PulseRow = Awaited<ReturnType<typeof pulsesApi.list>>['items'][number];
+
+function LatestPulsesPanel({ pulses }: { pulses: PulseRow[] }) {
+    return (
+        <div className="panel panel-pad">
+            <PanelHead
+                title="Latest intel pulses"
+                sub={`${pulses.length} most recent`}
+                right={
+                    <Link href="/feeds" className="text-[12px] text-text-3 hover:text-text inline-flex items-center gap-0.5">
+                        All feeds <ChevronRight className="size-3" />
+                    </Link>
+                }
+            />
+            <ul className="mt-3 space-y-2">
+                {pulses.length === 0 ? (
+                    <li className="text-[12.5px] text-text-3">No pulses yet.</li>
+                ) : pulses.map(p => (
+                    <li key={p.id}>
+                        <Link
+                            href={`/feeds/${encodeURIComponent(p.id)}`}
+                            className="grid grid-cols-[8px_1fr_auto] items-start gap-3 py-1 hover:text-text transition-colors"
+                        >
+                            <StatusDot status="ok" className="mt-1.5" />
+                            <div className="min-w-0">
+                                <div className="text-[13px] truncate font-medium">{p.name}</div>
+                                <div className="text-[11px] text-text-3 truncate">
+                                    {[p.author, p.indicatorCount != null ? `${p.indicatorCount} IOCs` : null]
+                                        .filter(Boolean).join(' · ')}
+                                </div>
+                            </div>
+                            <span className="text-[11px] text-text-4 font-mono tnum shrink-0">
+                                {relTime(p.otxModified ?? p.updatedAt ?? p.createdAt ?? '')}
+                            </span>
+                        </Link>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
 }
