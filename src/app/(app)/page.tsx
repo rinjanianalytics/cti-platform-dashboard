@@ -48,6 +48,24 @@ const WINDOW_OPTIONS = [
 ] as const;
 
 /**
+ * Map the window switcher to a `days` count for `/v1/stats/sparklines`.
+ * `24H` resolves to 2 days so deltaPct still has a previous bucket to
+ * compare against — a 1-day series would have nothing to diff. The
+ * sparkline trims the partial-day bucket via `trimPartialDay()` before
+ * rendering, so the visible window matches the user's selection.
+ *
+ * NB: only sparklines + KPI deltas currently respond to the window
+ * switch. `stats`, `landscape`, `activeActors`, `trendingTags`, and
+ * `feedMonitoring` are point-in-time endpoints with no window
+ * parameter on the backend yet (Phase 3 backend roadmap item).
+ */
+const WINDOW_DAYS: Record<WindowKey, number> = {
+    '24H': 2,
+    '7D':  7,
+    '30D': 30,
+};
+
+/**
  * Direct CSS variable refs for the severity bars, used in place of the
  * `bg-sev-*` Tailwind utilities. Reason: the panel's track colour
  * (`--bg-3`) is only defined inside `.dark`, and Tailwind 4's
@@ -67,10 +85,18 @@ const SEV_BAR_VAR: Record<Severity, string> = {
 
 export default function CommandPage() {
     const [windowSel, setWindowSel] = useState<WindowKey>('7D');
+    const windowDays = WINDOW_DAYS[windowSel];
 
     const { data: stats }     = useSWR('cc:stats',     () => platform.stats());
     const { data: landscape } = useSWR('cc:landscape', () => platform.landscape());
-    const { data: sparks }    = useSWR('cc:sparks',    () => platform.sparklines(7), { refreshInterval: 60_000 });
+    // Sparkline key includes `windowDays` so SWR refetches when the
+    // window switch fires. KpiTile reads `deltaPct(sparks.X)` which
+    // recomputes against the new series automatically.
+    const { data: sparks }    = useSWR(
+        ['cc:sparks', windowDays] as const,
+        ([, days]) => platform.sparklines(days),
+        { refreshInterval: 60_000 },
+    );
     const { data: coverage }  = useSWR('cc:mitre',     () => platform.mitreCoverage());
     const { data: actors }    = useSWR('cc:actors',    () => platform.activeActors(6));
     const { data: trending }  = useSWR('cc:trending',  () => platform.trendingTags());
