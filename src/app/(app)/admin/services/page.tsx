@@ -14,7 +14,6 @@ import {
     Play, ServerCog, AlertTriangle,
 } from 'lucide-react';
 import { cn, relTime } from '@/lib/utils';
-import { PageHeader } from '@/components/admin/page-header';
 import { StatusTile } from '@/components/admin/stat';
 import { StatusBadge, type StatusKind } from '@/lib/tone';
 
@@ -71,20 +70,20 @@ export default function AdminServicesPage() {
     }
 
     return (
-        <div className="space-y-6">
-            <PageHeader
-                title="Services"
-                description={
-                    !data
-                        ? `Auto-refreshes every ${Math.round(REFRESH_MS / 1000)}s.`
-                        : `${probes.length - failingCount - idleCount} healthy · ${failingCount} failing · ${idleCount} inactive`
-                }
-                actions={
-                    <Button size="sm" variant="outline" onClick={() => mutate()} disabled={isLoading}>
-                        <RefreshCw className={cn('size-3.5', isLoading && 'animate-spin')} /> Refresh now
-                    </Button>
-                }
-            />
+        <div className="space-y-4">
+            <div className="flex items-end justify-between gap-4 flex-wrap">
+                <div>
+                    <h1 className="h-page">Services</h1>
+                    <p className="sub tabular-nums mt-1">
+                        {!data
+                            ? `Auto-refreshes every ${Math.round(REFRESH_MS / 1000)}s.`
+                            : `${probes.length - failingCount - idleCount} healthy · ${failingCount} failing · ${idleCount} inactive`}
+                    </p>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => mutate()} disabled={isLoading}>
+                    <RefreshCw className={cn('size-3.5', isLoading && 'animate-spin')} /> Refresh now
+                </Button>
+            </div>
 
             {/* ── Panel 1 · System health ─────────────────────────────────── */}
             <Card>

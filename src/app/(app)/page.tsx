@@ -193,20 +193,23 @@ function KpiTile({
     delta: { sign: 'up' | 'down' | 'flat'; pct: number } | null;
     sub?: string;
 }) {
+    // Padding matches the design's asymmetric 15/16/13 (slightly tighter at the
+    // bottom so the sub line sits closer to the number).
     return (
         <Link
             href={href}
-            className="panel panel-pad flex flex-col gap-2 hover:bg-bg-2 transition-colors"
+            className="panel flex flex-col hover:bg-bg-2 transition-colors px-4 pt-[15px] pb-[13px]"
         >
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-start justify-between gap-2">
                 <span className="eyebrow">{eyebrow}</span>
                 {delta && delta.sign !== 'flat' && (
                     <span
                         className={cn(
-                            'inline-flex items-center gap-0.5 font-mono text-[10.5px] tnum px-1.5 py-0.5 rounded',
-                            delta.sign === 'up'
-                                ? 'text-ok bg-[oklch(from_var(--ok)_l_c_h_/_0.12)]'
-                                : 'text-sev-high bg-sev-high-soft',
+                            // Per the design: 11px mono, no background tint —
+                            // just the coloured glyph + percent. The arrow is
+                            // 11px stroke-2.4 (we approximate with size-2.5).
+                            'inline-flex items-center gap-0.5 font-mono text-[11px] tnum',
+                            delta.sign === 'up' ? 'text-ok' : 'text-sev-high',
                         )}
                     >
                         {delta.sign === 'up' ? <ArrowUp className="size-2.5" /> : <ArrowDown className="size-2.5" />}
@@ -214,15 +217,15 @@ function KpiTile({
                     </span>
                 )}
             </div>
-            <div className="flex items-end justify-between gap-3 min-w-0">
-                <div className="font-mono text-[28px] leading-none font-semibold tnum truncate">
+            <div className="flex items-end justify-between gap-2.5 min-w-0 mt-2">
+                <div className="font-mono text-[28px] leading-none font-semibold tnum tracking-[-0.02em] truncate">
                     {fmt(value ?? null)}
                 </div>
                 {sparkData && (
                     <Sparkline data={sparkData} tone={sparkTone} variant="gradient" width={78} height={30} />
                 )}
             </div>
-            {sub && <div className="text-[12px] text-text-3 truncate">{sub}</div>}
+            {sub && <div className="text-[11.5px] text-text-2 truncate mt-2.5">{sub}</div>}
         </Link>
     );
 }
@@ -327,9 +330,10 @@ function SeverityPanel({ landscape }: { landscape: Awaited<ReturnType<typeof pla
                 title="Severity distribution"
                 sub={`${fmt(total)} active indicators`}
             />
-            {/* Stacked spectrum bar */}
+            {/* Stacked spectrum — 8px tall per spec, sits above the rows with
+                a tighter gap than the panel-pad default (18px). */}
             {total > 0 && (
-                <div className="mt-3 flex h-2 w-full overflow-hidden rounded">
+                <div className="mt-3 mb-4.5 flex h-2 w-full overflow-hidden rounded-[5px] bg-bg-3">
                     {buckets.map(b => (
                         <div
                             key={b.sev}
@@ -340,20 +344,21 @@ function SeverityPanel({ landscape }: { landscape: Awaited<ReturnType<typeof pla
                     ))}
                 </div>
             )}
-            {/* Per-severity rows */}
-            <ul className="mt-3 space-y-1.5">
+            {/* Per-severity rows — design uses 12px gap, 13px row spacing,
+                count text 12.5px in --text colour. */}
+            <ul className="space-y-3.25">
                 {buckets.length === 0 ? (
                     <li className="text-[12.5px] text-text-3">No severity data yet.</li>
                 ) : buckets.map(b => (
-                    <li key={b.sev} className="grid grid-cols-[74px_1fr_auto] items-center gap-2">
-                        <Sev level={b.sev} />
-                        <div className="h-1.5 bg-bg-3 rounded-full overflow-hidden">
+                    <li key={b.sev} className="grid grid-cols-[74px_1fr_auto] items-center gap-3">
+                        <Sev level={b.sev} className="justify-center w-18.5" />
+                        <div className="h-1.5 bg-bg-3 rounded">
                             <div
-                                className={cn('h-full rounded-full', SEV_BAR_BG[b.sev])}
-                                style={{ width: `${(b.count / max) * 100}%` }}
+                                className={cn('h-full rounded', SEV_BAR_BG[b.sev])}
+                                style={{ width: `${Math.max((b.count / max) * 100, 1.5)}%` }}
                             />
                         </div>
-                        <span className="font-mono text-[12px] tnum text-text-2 w-[60px] text-right">
+                        <span className="font-mono text-[12.5px] tnum text-text w-14 text-right">
                             {fmt(b.count)}
                         </span>
                     </li>
@@ -382,25 +387,28 @@ function IndicatorTypesPanel({
                 title="Indicator types"
                 sub={total ? `${fmt(total)} indicators` : undefined}
             />
-            <ul className="mt-3 space-y-1.5">
+            <ul className="mt-3 space-y-2.25">
                 {top.length === 0 ? (
                     <li className="text-[12.5px] text-text-3">No data.</li>
                 ) : top.map((t, i) => {
-                    const opacity = 1 - (i * 0.08);
+                    // Opacity ramp from the design: `0.55 + 0.45 * (1 - i/n)`.
+                    // Top row is fully bright; tail rows dim to ~0.55. Reads as
+                    // a heatmap of dominance across the type distribution.
+                    const opacity = 0.55 + 0.45 * (1 - i / top.length);
                     return (
-                        <li key={t.type} className="grid grid-cols-[96px_1fr_auto] items-center gap-2">
-                            <span className="font-mono text-[11px] uppercase tracking-wider text-text-3 truncate">{t.type}</span>
-                            <div className="h-1.5 bg-bg-3 rounded-full overflow-hidden">
+                        <li key={t.type} className="grid grid-cols-[96px_1fr_auto] items-center gap-2.5">
+                            <span className="font-mono text-[11px] uppercase tracking-wider text-text-2 truncate">{t.type}</span>
+                            <div className="h-2 bg-bg-3 rounded">
                                 <div
-                                    className="h-full rounded-full"
+                                    className="h-full rounded"
                                     style={{
-                                        width: `${(t.count / max) * 100}%`,
+                                        width: `${Math.max((t.count / max) * 100, 1)}%`,
                                         background: `linear-gradient(90deg, var(--brand-dim), var(--brand))`,
-                                        opacity: Math.max(0.4, opacity),
+                                        opacity,
                                     }}
                                 />
                             </div>
-                            <span className="font-mono text-[12px] tnum text-text-2 w-[58px] text-right">
+                            <span className="font-mono text-[12px] tnum text-text-2 w-12.5 text-right">
                                 {fmt(t.count)}
                             </span>
                         </li>
@@ -430,7 +438,7 @@ function AttackHeatmap({
                 title="ATT&CK coverage"
                 sub={`${tactics.length} tactics tracked`}
             />
-            <div className="mt-3 grid grid-cols-3 gap-1.5">
+            <div className="mt-3 grid grid-cols-3 gap-1.75">
                 {tactics.length === 0 ? (
                     <div className="col-span-3 text-[12.5px] text-text-3">No coverage data.</div>
                 ) : tactics.map(t => {
@@ -440,20 +448,31 @@ function AttackHeatmap({
                     return (
                         <div
                             key={t.mitreId}
-                            className="rounded p-2 min-w-0"
+                            // Design uses 9px/10px asymmetric padding + border
+                            // + .r-sm radius. The dark-ink switch fires above
+                            // ratio 0.5; weight bumps to 600 on the name when
+                            // dark for extra contrast against the brand fill.
+                            className="rounded-md border border-line-soft px-2.5 py-2.25 min-w-0"
                             style={{
                                 background: `oklch(from var(--brand) l c h / ${alpha})`,
                                 color: dark ? '#0b0e14' : 'var(--text)',
                             }}
                         >
                             <div
-                                className="font-mono text-[9.5px] tracking-wider"
+                                className="font-mono text-[9.5px] tracking-wider mb-0.75"
                                 style={{ color: dark ? 'rgba(11,14,20,.62)' : 'var(--text-3)' }}
                             >
                                 {t.mitreId}
                             </div>
-                            <div className="text-[11.5px] truncate font-medium">{t.name}</div>
-                            <div className="text-[16px] font-mono tnum leading-tight mt-0.5">{t.techniqueCount}</div>
+                            <div
+                                className={cn(
+                                    'text-[11.5px] truncate mb-1.25',
+                                    dark ? 'font-semibold' : 'font-normal',
+                                )}
+                            >
+                                {t.name}
+                            </div>
+                            <div className="text-[16px] font-mono font-semibold tnum leading-tight">{t.techniqueCount}</div>
                         </div>
                     );
                 })}
@@ -482,20 +501,27 @@ function TrendingTagsPanel({
                 title="Trending tags"
                 sub={`${tags.length} this window`}
             />
-            <ul className="mt-3 space-y-1.5">
+            <ul className="mt-3">
                 {tags.length === 0 ? (
                     <li className="text-[12.5px] text-text-3">No tags trending.</li>
-                ) : tags.slice(0, 8).map(t => (
-                    <li key={t.tag} className="flex items-center justify-between gap-2 min-w-0">
-                        <span className="font-mono text-[12.5px] truncate">{t.tag}</span>
-                        <span className="flex items-center gap-2 shrink-0">
-                            {t.hot && (
-                                <span className="text-sev-high inline-flex items-center" title="Hot">
-                                    <Flame className="size-3" />
-                                </span>
-                            )}
-                            <span className="font-mono text-[12px] tnum text-text-2">{fmt(t.count)}</span>
-                        </span>
+                ) : tags.slice(0, 8).map((t, i) => (
+                    <li
+                        key={t.tag}
+                        className={cn(
+                            // Design uses a per-row 7px vertical padding +
+                            // 1px line-soft separator between rows. Mirrors
+                            // the data-row rhythm in the Severity panel.
+                            'flex items-center gap-2.5 min-w-0 py-1.75',
+                            i > 0 && 'border-t border-line-soft',
+                        )}
+                    >
+                        <span className="font-mono text-[12.5px] truncate flex-1 text-text-2">{t.tag}</span>
+                        {t.hot && (
+                            <span className="text-sev-high inline-flex items-center shrink-0" title="Hot">
+                                <Flame className="size-3" />
+                            </span>
+                        )}
+                        <span className="font-mono text-[12px] tnum text-text-3 shrink-0">{fmt(t.count)}</span>
                     </li>
                 ))}
             </ul>
@@ -524,30 +550,36 @@ function ActorWatchlistPanel({ actors }: { actors: ActiveActor[] }) {
                     </Link>
                 }
             />
-            <ul className="mt-3 space-y-2">
+            <ul className="mt-3">
                 {actors.length === 0 ? (
                     <li className="text-[12.5px] text-text-3">No active actors this window.</li>
-                ) : actors.map(a => {
+                ) : actors.map((a, i) => {
                     const hot = a.score > 70;
                     return (
-                        <li key={a.id}>
+                        <li
+                            key={a.id}
+                            className={cn(i > 0 && 'border-t border-line-soft')}
+                        >
                             <Link
                                 href={`/actors/${encodeURIComponent(a.id)}`}
-                                className="grid grid-cols-[1fr_auto_auto] items-center gap-3 py-1 hover:text-text transition-colors"
+                                // Per the design: 8px vertical padding, 11px gap,
+                                // 52×5 score bar, 24px right-aligned numeric.
+                                // The compact bar reads as a meter, not a chart.
+                                className="grid grid-cols-[1fr_13ch_6ch] items-center gap-2.75 py-2 hover:text-text transition-colors"
                             >
                                 <div className="min-w-0">
-                                    <div className="text-[13px] font-medium truncate">{a.name}</div>
+                                    <div className="text-[12.5px] font-medium truncate">{a.name}</div>
                                     <div className="text-[11px] text-text-3 truncate">
                                         {[a.primaryMotivation, a.sophistication].filter(Boolean).join(' · ') || '—'}
                                     </div>
                                 </div>
-                                <div className="w-[120px] h-1.5 bg-bg-3 rounded-full overflow-hidden">
+                                <div className="h-1.25 bg-bg-3 rounded-sm w-13">
                                     <div
-                                        className={cn('h-full rounded-full', hot ? 'bg-sev-high' : 'bg-brand')}
+                                        className={cn('h-full rounded-sm', hot ? 'bg-sev-high' : 'bg-brand')}
                                         style={{ width: `${(a.score / max) * 100}%` }}
                                     />
                                 </div>
-                                <span className="font-mono text-[12px] tnum text-text-2 w-[36px] text-right">
+                                <span className="font-mono text-[12px] tnum text-text-2 text-right">
                                     {a.score.toFixed(0)}
                                 </span>
                             </Link>
