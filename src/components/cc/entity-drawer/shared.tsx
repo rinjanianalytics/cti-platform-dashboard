@@ -97,7 +97,18 @@ export function AttrList({ rows }: { rows: Array<{ label: string; value: ReactNo
 
 /** Tags row — falls back to em-dash if empty. */
 export function TagsRow({ tags }: { tags: string[] | null | undefined }) {
-    const list = tags ?? [];
+    // Dedup before rendering — some feeds emit the same tag more than once
+    // per IOC (e.g. ThreatFox's "ClearFake, ClearFake"), and React's
+    // duplicate-key check then fires `key={t}` collisions. We also lower-
+    // case for the dedup pass so "ClearFake" and "clearfake" collapse,
+    // keeping the first-seen casing for display.
+    const seen = new Set<string>();
+    const list = (tags ?? []).filter(t => {
+        const norm = t.toLowerCase();
+        if (seen.has(norm)) return false;
+        seen.add(norm);
+        return true;
+    });
     if (list.length === 0) {
         return <span className="text-[12.5px] text-text-4">No tags.</span>;
     }
