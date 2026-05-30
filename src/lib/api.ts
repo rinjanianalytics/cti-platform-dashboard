@@ -771,8 +771,19 @@ export const notifications = {
 };
 
 export const platform = {
-    async stats(): Promise<{ counts: Stats }> {
-        return request('/v1/stats');
+    /**
+     * `?days=N` opt-in (rolling-window switcher on the command page).
+     * When passed, the API returns an additional `windowCounts` object
+     * with arrivals in the last N days; `counts` is always total-of-
+     * record. Backend: apps/api/src/routes/v1/stats.ts.
+     */
+    async stats(opts: { days?: number } = {}): Promise<{
+        counts: Stats;
+        windowCounts?: Stats;
+        windowDays?: number;
+    }> {
+        const qs = opts.days != null ? `?days=${opts.days}` : '';
+        return request(`/v1/stats${qs}`);
     },
     /**
      * Daily-bucketed counts for the four overview KPI tiles — drives the
@@ -798,7 +809,7 @@ export const platform = {
     }> {
         return request('/v1/mitre/coverage');
     },
-    async activeActors(limit = 8): Promise<{
+    async activeActors(limit = 8, days?: number): Promise<{
         actors: Array<{
             id: string; stixId: string | null; name: string;
             aliases: string[]; country: string | null; sophistication: string | null;
@@ -821,16 +832,28 @@ export const platform = {
          *  used by the Threat Actors KPI tile's sub-line. */
         total: number;
     }> {
-        return request(`/v1/actors/active?limit=${limit}`);
+        const daysQs = days != null ? `&days=${days}` : '';
+        return request(`/v1/actors/active?limit=${limit}${daysQs}`);
     },
-    async landscape(): Promise<LandscapeOverview> {
-        return request('/v1/landscape/overview');
+    /**
+     * `period` opt-in (rolling-window switcher). The backend supports
+     * '24h' | '7d' | '30d' | '90d'. When omitted, the API picks its
+     * own default.
+     */
+    async landscape(opts: { period?: '24h' | '7d' | '30d' | '90d' } = {}): Promise<LandscapeOverview> {
+        const qs = opts.period ? `?period=${opts.period}` : '';
+        return request(`/v1/landscape/overview${qs}`);
     },
     async sourceBreakdown(): Promise<Array<{ source: string; count: number }>> {
         return request('/v1/stats/source-breakdown');
     },
-    async trendingTags(): Promise<Array<{ tag: string; count: number; hot: boolean }>> {
-        return request('/v1/stats/trending-tags');
+    /**
+     * `?days=N` opt-in (rolling-window switcher). Default behaviour on
+     * the backend is the previous 30-day window.
+     */
+    async trendingTags(opts: { days?: number } = {}): Promise<Array<{ tag: string; count: number; hot: boolean }>> {
+        const qs = opts.days != null ? `?days=${opts.days}` : '';
+        return request(`/v1/stats/trending-tags${qs}`);
     },
     async feedMonitoring(): Promise<{
         feeds: Array<{
