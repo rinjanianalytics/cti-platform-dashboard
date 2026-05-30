@@ -13,7 +13,8 @@ import { Copy, Check, Eye, Network as GraphIcon, FileText, Workflow, Sparkles } 
 import { toast } from 'sonner';
 import {
     search, hitHref, hitLabel, normalizeEntityType,
-    watch, type WatchEntityType, type SearchHit,
+    watch, platform,
+    type WatchEntityType, type SearchHit,
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useEntityDrawer, type EntityKind } from './context';
@@ -245,31 +246,62 @@ export function RelatedSection({ docId, type }: { docId: string; type: EntityKin
 }
 
 /**
- * Sighting trend — 14-day sparkline placeholder.
+ * Sighting trend — 14-day per-entity activity sparkline.
  *
- * The brief asks for a per-entity sighting trend. The aggregate
- * `/v1/stats/sparklines` endpoint we use on the Command page sums across
- * all entities — there's no per-entity history endpoint yet (see
- * ROADMAP Phase 3 backend work). Until then, render a muted "no
- * timeline yet" placeholder so the section is present and the
- * Phase 3 wiring slot is obvious.
+ * Fetches `/v1/timeline/:type/:id?days=14` for the open entity. The
+ * backend routes by entity type to whichever truthful signal exists
+ * today:
+ *
+ *   actor → pulse mentions (adversary match)
+ *   cve   → pulse mentions (text-match on the CVE id)
+ *   ioc   → sightings table (empty in dev; series stays flat zero
+ *           until sightings populate, in which case this lights up
+ *           automatically with no frontend change)
+ *
+ * The descriptive subtitle ("pulse mentions" vs "sightings") tracks
+ * the backend's `signal` field so the analyst knows what's being
+ * counted, not just a generic "activity".
+ *
+ * Rendered as a muted "No activity yet" placeholder when the entire
+ * series is zero — better than a flat-line sparkline.
  */
-export function SightingTrend() {
+export function SightingTrend({
+    type,
+    id,
+}: {
+    type: 'ioc' | 'cve' | 'actor';
+    id: string | undefined;
+}) {
+    const { data, isLoading } = useSWR(
+        id ? ['drawer:timeline', type, id] : null,
+        () => platform.entityTimeline(type, id!, { days: 14 }),
+        { revalidateOnFocus: false, shouldRetryOnError: false },
+    );
+
+    const series = data?.series ?? Array(14).fill(0);
+    const total  = series.reduce((s, v) => s + v, 0);
+    const signal = data?.signal;
+    const empty  = !isLoading && total === 0;
+
+    const subtitle = empty
+        ? 'No activity yet'
+        : signal === 'sightings'
+            ? `${total} sighting${total === 1 ? '' : 's'} in last 14d`
+            : `${total} pulse mention${total === 1 ? '' : 's'} in last 14d`;
+
     return (
         <DrawerSection title="Sighting trend · 14d">
             <div className="flex items-center gap-3">
                 <Sparkline
-                    data={Array(14).fill(0)}
-                    tone="muted"
+                    data={series}
+                    tone={empty ? 'muted' : 'brand'}
                     variant="gradient"
                     width={160}
                     height={32}
-                    endCap={false}
-                    label="No timeline data yet"
+                    endCap={!empty}
+                    label={subtitle}
                 />
-                <div className="text-[11.5px] text-text-4">
-                    Per-entity timeline arrives with the events stream in Phase 3.
-                </div>
+                <div className="text-[11.5px] text-text-4">{subtitle}</div>
             </div>
         </DrawerSection>
     );

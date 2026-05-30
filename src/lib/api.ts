@@ -870,6 +870,37 @@ export const platform = {
     }> {
         return request('/v1/monitoring/feeds');
     },
+    /**
+     * Per-entity activity timeline used by the entity drawer's
+     * Sighting Trend section. Daily-bucketed signal of length `days`:
+     *
+     *   actor → distinct pulses mentioning the actor by name/alias
+     *   cve   → distinct pulses with the CVE id in name/description
+     *   ioc   → distinct sightings (currently empty in dev; series is
+     *           all zeros until sightings populate)
+     *
+     * `signal` is one of 'pulse_mentions' | 'sightings' so the drawer
+     * can pick a copy that matches the source ("pulse mentions" for
+     * actor/cve, "sightings" for ioc).
+     *
+     * Backend: apps/api/src/routes/v1/timeline.ts. `days` clamps to
+     * [1, 90]; defaults to 14 server-side to match the drawer's "14d"
+     * header.
+     */
+    async entityTimeline(
+        type: 'ioc' | 'cve' | 'actor',
+        id: string,
+        opts: { days?: number } = {},
+    ): Promise<{
+        type: 'ioc' | 'cve' | 'actor';
+        id: string;
+        days: number;
+        signal: 'pulse_mentions' | 'sightings';
+        series: number[];
+    }> {
+        const qs = opts.days != null ? `?days=${opts.days}` : '';
+        return request(`/v1/timeline/${type}/${encodeURIComponent(id)}${qs}`);
+    },
 };
 
 /* ============================================================================

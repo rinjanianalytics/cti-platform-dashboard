@@ -80,8 +80,8 @@ export function IocContent({ id }: { id: string }) {
             {/* Related */}
             <RelatedSection docId={data.id} type="ioc" />
 
-            {/* Sighting trend (placeholder) */}
-            <SightingTrend />
+            {/* Sighting trend — driven by sightings.observed_at when populated */}
+            <SightingTrend type="ioc" id={data.id} />
 
             {/* Footer */}
             <DrawerFooter />
