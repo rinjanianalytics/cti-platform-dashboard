@@ -143,7 +143,7 @@ export function CcDataTable<T>({
         ? (
             Array.from({ length: 8 }).map((_, i) => (
                 <tr key={`sk:${i}`} className={cn(rowPad, 'border-b border-line-soft')}>
-                    {selection && <td className={cn('w-10 pl-3', cellY)}><Skeleton className="size-4" /></td>}
+                    {selection && <td className={cn('pl-3', cellY)}><Skeleton className="size-4" /></td>}
                     <td colSpan={columns.length} className={cn('px-3', cellY)}>
                         <Skeleton className="h-4 w-full" />
                     </td>
@@ -182,7 +182,7 @@ export function CcDataTable<T>({
                     } : undefined}
                 >
                     {selection && (
-                        <td className={cn('w-10 pl-3', cellY)} data-row-checkbox>
+                        <td className={cn('pl-3', cellY)} data-row-checkbox>
                             <input
                                 type="checkbox"
                                 checked={isSelected}
@@ -196,17 +196,13 @@ export function CcDataTable<T>({
                     {columns.map(col => (
                         <td
                             key={col.id}
-                            // `overflow-hidden` on the cell is a safety net for
-                            // `table-fixed` — without it, a cell renderer that
-                            // forgets `truncate` would paint its content over
-                            // the next column, defeating the alignment fix.
-                            // The cell's column width is determined by the
-                            // <th> in table-fixed mode; this just clips the
-                            // visual overflow.
+                            // `overflow-hidden` is a safety net — `<col>` sets
+                            // the column width; a cell renderer that forgets
+                            // `truncate` would otherwise paint into the next
+                            // column.
                             className={cn(
                                 'px-3 overflow-hidden',
                                 cellY,
-                                col.width,
                                 col.align === 'right' && 'text-right',
                                 col.align === 'center' && 'text-center',
                                 col.className,
@@ -242,32 +238,35 @@ export function CcDataTable<T>({
             )}
 
             {/* Scrollable table body.
-                `table-fixed` keeps the headers and body cells aligned even
-                when row content (a 64-char hash, a long IOC value) is wider
-                than the header label. Without it (`table-layout: auto`),
-                each column negotiates its width against the widest cell in
-                that column — but `position: sticky` on `<thead>` falls
-                outside that negotiation in Chromium, so the headers ended
-                up rendering at their min-content widths while the body
-                cells stretched. Result: a noticeable column-by-column
-                shift visible in every Investigate table.
 
-                Sticky positioning moves from `<thead>` (where it broke
-                width negotiation) to each `<th>` cell (where it stays in
-                the column layout but still pins to the scroll container's
-                top edge).
+                Column widths are defined ONCE at the table level via a
+                `<colgroup>` of `<col>` elements — not on each `<th>` /
+                `<td>`. This is the only place the browser will respect
+                widths uniformly across head and body: `<col>` widths feed
+                straight into the table layout algorithm before any row
+                renders, so sticky positioning, severity-tint pseudos, or
+                a wide content cell can't drag a column off-axis. The
+                previous attempt put `w-*` on `<th>` and `<td>` and relied
+                on `table-fixed` first-row negotiation — it lost to
+                Chromium's sticky-header column resolution and produced
+                the visible head/body shift.
 
-                In `table-fixed` mode the first row's widths drive the
-                whole table — columns with `col.width` get exactly that;
-                the un-widthed `value` column claims the remaining space.
-                Long content inside cells truncates via `truncate`/`block`
-                wrappers on the cell renderers (already in place). */}
+                `table-fixed` keeps the `<col>` widths authoritative; an
+                un-widthed column (the `value` column in /iocs) claims
+                the remaining space. Cells truncate via `truncate block`
+                wrappers in the cell renderers. */}
             <div className="flex-1 min-h-0 overflow-auto">
                 <table className="w-full text-sm border-separate border-spacing-0 table-fixed">
+                    <colgroup>
+                        {selection && <col className="w-10" />}
+                        {columns.map(col => (
+                            <col key={col.id} className={col.width} />
+                        ))}
+                    </colgroup>
                     <thead>
                         <tr>
                             {selection && (
-                                <th className="w-10 pl-3 py-2 text-left sticky top-0 z-10 bg-bg-2 border-b border-line-soft">
+                                <th className="pl-3 py-2 text-left sticky top-0 z-10 bg-bg-2 border-b border-line-soft">
                                     <input
                                         type="checkbox"
                                         checked={allOnPageSelected}
@@ -286,7 +285,6 @@ export function CcDataTable<T>({
                                         className={cn(
                                             'px-3 py-2 text-left font-medium text-[11px] text-text-3',
                                             'sticky top-0 z-10 bg-bg-2 border-b border-line-soft',
-                                            col.width,
                                             col.align === 'right' && 'text-right',
                                             col.align === 'center' && 'text-center',
                                             col.sortable && 'cursor-pointer select-none hover:text-text',
