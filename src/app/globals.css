@@ -260,9 +260,11 @@
     @apply font-sans;
   }
   /* Page titles + section headings use the display face (IBM Plex Sans).
-     Body, panel labels, and inline text keep Geist for readability. */
+     Direct next/font ref (not Tailwind theme token) so the font lands
+     even outside Tailwind utility context — see `.eyebrow` for the
+     full rationale on `@theme inline`. */
   h1, h2 {
-    font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+    font-family: var(--font-display), var(--font-plex-sans), system-ui, sans-serif;
     letter-spacing: -0.015em;
   }
 }
@@ -312,8 +314,15 @@
    live-pulse dots, severity row tinting).
    ========================================================================= */
 
+/* Direct next/font variable refs (set on <html> via next/font). Referring
+   to the Tailwind theme variables (`--font-sans`, `--font-mono`) here
+   would be unreliable because `@theme inline` suppresses their emission
+   as CSS custom properties — utility classes still get the right font,
+   but `var(--font-mono)` in non-Tailwind CSS like `.eyebrow` would fail
+   to resolve and fall back to the body sans. The explicit chain via
+   `var(--font-plex-mono)` resolves directly through the document cascade. */
 .h-page {
-    font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+    font-family: var(--font-display), var(--font-plex-sans), system-ui, -apple-system, sans-serif;
     font-size: 22px;
     font-weight: 600;
     letter-spacing: -0.01em;
@@ -321,7 +330,7 @@
 }
 
 .eyebrow {
-    font-family: var(--font-mono);
+    font-family: var(--font-plex-mono), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     font-size: 10.5px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -368,7 +377,9 @@
    Component layer renders these via the <Sev/> component; class kept here
    so consumers without the component (status banners, chips) can use it. */
 .sev {
-    font-family: var(--font-mono);
+    /* See `.eyebrow` above for why we ref --font-plex-mono directly
+       instead of Tailwind's --font-mono theme token. */
+    font-family: var(--font-plex-mono), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.08em;
@@ -405,7 +416,8 @@
 .chip {
     height: 21px;
     padding: 0 8px;
-    font-family: var(--font-mono);
+    /* See `.eyebrow` above — direct next/font ref, not Tailwind theme token. */
+    font-family: var(--font-plex-mono), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     font-size: 11px;
     background: var(--bg-2);
     border: 1px solid var(--line-soft);
