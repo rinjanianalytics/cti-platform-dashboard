@@ -109,8 +109,8 @@ export function ActorContent({ idOrName }: { idOrName: string }) {
             {/* Related */}
             <RelatedSection docId={data.id} type="actor" />
 
-            {/* Sighting trend (placeholder) */}
-            <SightingTrend />
+            {/* Sighting trend — pulse mentions matching the actor name/aliases */}
+            <SightingTrend type="actor" id={data.id} />
 
             {/* Footer */}
             <DrawerFooter />
