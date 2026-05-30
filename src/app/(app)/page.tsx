@@ -328,21 +328,20 @@ function TriagePanel({ triage }: { triage: TriageIoc[] }) {
                                 >
                                     <Link
                                         href={`/iocs/${item.id}`}
-                                        // Flex row with sev pill tight to the
-                                        // value (gap-3 between them) and the
-                                        // timestamp pushed to the panel's
-                                        // right edge via `ml-auto`. This
-                                        // strikes the balance the design
-                                        // wants:
-                                        //   * sev pill reads as part of the
-                                        //     row's identity (next to value)
-                                        //   * timestamp lines up vertically
-                                        //     in a "time column" on the right
-                                        //   * empty space sits BETWEEN sev
-                                        //     and time, not after time,
-                                        //     killing the dead-space-on-the-
-                                        //     right feel of the previous
-                                        //     left-clustered layout.
+                                        // Two-zone layout:
+                                        //   LEFT  — status dot + value/meta
+                                        //   RIGHT — sev pill + timestamp, both
+                                        //           pushed to the panel's right
+                                        //           edge so the empty space
+                                        //           sits BETWEEN the two zones,
+                                        //           not floating in the middle.
+                                        //
+                                        // `ml-auto` lives on the sev pill (the
+                                        // first right-zone element) so the
+                                        // sev/time pair clusters together at
+                                        // the right with their natural gap,
+                                        // instead of orphaning the time at the
+                                        // far edge.
                                         className="flex items-center gap-3 px-2 py-2 rounded hover:bg-bg-2 transition-colors"
                                     >
                                         <StatusDot status={dot} />
@@ -358,8 +357,8 @@ function TriagePanel({ triage }: { triage: TriageIoc[] }) {
                                                 </>}
                                             </div>
                                         </div>
-                                        <Sev level={sev} short className="shrink-0" />
-                                        <span className="text-[11px] text-text-4 font-mono tnum shrink-0 w-8 text-right ml-auto">
+                                        <Sev level={sev} short className="shrink-0 ml-auto" />
+                                        <span className="text-[11px] text-text-4 font-mono tnum shrink-0 w-8 text-right">
                                             {relTime(item.lastSeen ?? item.firstSeen ?? item.createdAt ?? '')}
                                         </span>
                                     </Link>
