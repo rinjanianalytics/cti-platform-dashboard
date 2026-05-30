@@ -113,7 +113,7 @@ export default function CommandPage() {
                     href="/iocs"
                     eyebrow="Indicators"
                     value={stats?.counts.iocs}
-                    sparkData={sparks?.iocs}
+                    sparkData={trimPartialDay(sparks?.iocs)}
                     sparkTone="brand"
                     delta={deltaPct(sparks?.iocs)}
                     sub={landscape
@@ -124,7 +124,7 @@ export default function CommandPage() {
                     href="/vulnerabilities"
                     eyebrow="Vulnerabilities"
                     value={stats?.counts.vulnerabilities}
-                    sparkData={sparks?.vulnerabilities}
+                    sparkData={trimPartialDay(sparks?.vulnerabilities)}
                     sparkTone="sev-high"
                     delta={deltaPct(sparks?.vulnerabilities)}
                     sub={landscape
@@ -135,7 +135,7 @@ export default function CommandPage() {
                     href="/actors"
                     eyebrow="Threat actors"
                     value={stats?.counts.threatActors}
-                    sparkData={sparks?.threatActors}
+                    sparkData={trimPartialDay(sparks?.threatActors)}
                     sparkTone="sev-info"
                     delta={deltaPct(sparks?.threatActors)}
                     sub={actors ? `${actors.actors.length} active this week` : undefined}
@@ -144,7 +144,7 @@ export default function CommandPage() {
                     href="/feeds"
                     eyebrow="Active feeds"
                     value={feedList.length || undefined}
-                    sparkData={sparks?.feedSyncs}
+                    sparkData={trimPartialDay(sparks?.feedSyncs)}
                     sparkTone="ok"
                     delta={deltaPct(sparks?.feedSyncs)}
                     sub={feedList.length > 0 ? `${feedHealthy} healthy` : undefined}
@@ -230,17 +230,41 @@ function KpiTile({
     );
 }
 
-/** Naive delta as (last bucket vs avg of preceding) for the KPI chip. */
+/**
+ * Day-over-baseline delta for the KPI chip.
+ *
+ * `platform.sparklines(7)` returns 7 daily buckets where the LAST one is
+ * today — which is partial until 23:59 UTC. Comparing a partial day's
+ * count to the average of complete prior days produces alarming
+ * downward deltas at every refresh ("−70% indicators!") that don't
+ * reflect any real change.
+ *
+ * The fix: use the **last full day** (penultimate bucket) as "now" and
+ * average the days before that as the baseline. Today's incomplete
+ * bucket is ignored — it shows up in the Severity / triage panels via
+ * live counts, but it shouldn't define the trend.
+ */
 function deltaPct(series: number[] | undefined): { sign: 'up' | 'down' | 'flat'; pct: number } | null {
-    if (!series || series.length < 2) return null;
-    const last = series[series.length - 1];
-    const priorSlice = series.slice(0, -1);
-    const priorAvg = priorSlice.reduce((s, x) => s + x, 0) / Math.max(priorSlice.length, 1);
-    if (priorAvg === 0 && last === 0) return { sign: 'flat', pct: 0 };
+    if (!series || series.length < 3) return null;
+    const recent      = series[series.length - 2];   // yesterday (last complete day)
+    const priorSlice  = series.slice(0, -2);         // days before yesterday
+    if (priorSlice.length === 0) return null;
+    const priorAvg = priorSlice.reduce((s, x) => s + x, 0) / priorSlice.length;
+    if (priorAvg === 0 && recent === 0) return { sign: 'flat', pct: 0 };
     if (priorAvg === 0) return { sign: 'up', pct: 100 };
-    const pct = ((last - priorAvg) / priorAvg) * 100;
+    const pct = ((recent - priorAvg) / priorAvg) * 100;
     if (Math.abs(pct) < 0.5) return { sign: 'flat', pct: 0 };
     return { sign: pct > 0 ? 'up' : 'down', pct: Math.abs(pct) };
+}
+
+/**
+ * Drop the last (partial-day) bucket from a sparkline series. Same
+ * rationale as deltaPct — the partial day creates a misleading V-dip
+ * at the end of every sparkline.
+ */
+function trimPartialDay(series: number[] | undefined): number[] | undefined {
+    if (!series || series.length < 2) return series;
+    return series.slice(0, -1);
 }
 
 /* ============================================================================
@@ -279,10 +303,21 @@ function TriagePanel({ triage }: { triage: TriageIoc[] }) {
                                 <li key={item.id} className="triage-row group">
                                     <Link
                                         href={`/iocs/${item.id}`}
-                                        className="grid grid-cols-[16px_1fr_auto_auto] items-center gap-3 px-2 py-2 rounded hover:bg-bg-2 transition-colors"
+                                        // Flex layout per the design's prototype
+                                        // (display:flex, gap:13). The previous
+                                        // grid [16px_1fr_auto_auto] pushed the
+                                        // sev pill + time to the panel's far
+                                        // right edge — when the value text is
+                                        // short (typical for a single-word
+                                        // domain), the visual reads as the
+                                        // sev/time being orphaned from the row.
+                                        // `flex-1 min-w-0` still lets long
+                                        // values truncate, but short values
+                                        // keep the sev+time tight against them.
+                                        className="flex items-center gap-3 px-2 py-2 rounded hover:bg-bg-2 transition-colors"
                                     >
                                         <StatusDot status={dot} />
-                                        <div className="min-w-0">
+                                        <div className="flex-1 min-w-0">
                                             <div className="font-mono text-[13px] truncate">{item.value}</div>
                                             <div className="text-[11px] text-text-3 flex items-center gap-2 mt-0.5">
                                                 <span className="uppercase tracking-wider">{item.type}</span>
@@ -294,8 +329,8 @@ function TriagePanel({ triage }: { triage: TriageIoc[] }) {
                                                 </>}
                                             </div>
                                         </div>
-                                        <Sev level={sev} short />
-                                        <span className="text-[11px] text-text-4 font-mono tnum">
+                                        <Sev level={sev} short className="shrink-0" />
+                                        <span className="text-[11px] text-text-4 font-mono tnum shrink-0 w-8 text-right">
                                             {relTime(item.lastSeen ?? item.firstSeen ?? item.createdAt ?? '')}
                                         </span>
                                     </Link>
@@ -331,9 +366,14 @@ function SeverityPanel({ landscape }: { landscape: Awaited<ReturnType<typeof pla
                 sub={`${fmt(total)} active indicators`}
             />
             {/* Stacked spectrum — 8px tall per spec, sits above the rows with
-                a tighter gap than the panel-pad default (18px). */}
+                an 18px gap. Explicit inline style fallback for the height
+                in case Tailwind's `mb-4.5` arbitrary value doesn't resolve
+                in some build configurations — the spec is unambiguous. */}
             {total > 0 && (
-                <div className="mt-3 mb-4.5 flex h-2 w-full overflow-hidden rounded-[5px] bg-bg-3">
+                <div
+                    className="mt-3 flex h-2 w-full overflow-hidden rounded-[5px] bg-bg-3"
+                    style={{ marginBottom: 18 }}
+                >
                     {buckets.map(b => (
                         <div
                             key={b.sev}
@@ -345,17 +385,24 @@ function SeverityPanel({ landscape }: { landscape: Awaited<ReturnType<typeof pla
                 </div>
             )}
             {/* Per-severity rows — design uses 12px gap, 13px row spacing,
-                count text 12.5px in --text colour. */}
-            <ul className="space-y-3.25">
+                count text 12.5px in --text colour. Row bar bumped to 8px
+                (was 6px) so each row's relative weight reads from across
+                the room — at 6px on a narrow panel the bars vanished into
+                the background.
+
+                Minimum bar width is 4% (was 1.5%) so the tiny low-severity
+                bucket still registers visually instead of becoming a sliver
+                lost in the bg-3 track. */}
+            <ul style={{ rowGap: 13 }} className="flex flex-col">
                 {buckets.length === 0 ? (
                     <li className="text-[12.5px] text-text-3">No severity data yet.</li>
                 ) : buckets.map(b => (
                     <li key={b.sev} className="grid grid-cols-[74px_1fr_auto] items-center gap-3">
-                        <Sev level={b.sev} className="justify-center w-18.5" />
-                        <div className="h-1.5 bg-bg-3 rounded">
+                        <Sev level={b.sev} className="inline-flex justify-center w-full" />
+                        <div className="h-2 bg-bg-3 rounded">
                             <div
                                 className={cn('h-full rounded', SEV_BAR_BG[b.sev])}
-                                style={{ width: `${Math.max((b.count / max) * 100, 1.5)}%` }}
+                                style={{ width: `${Math.max((b.count / max) * 100, 4)}%` }}
                             />
                         </div>
                         <span className="font-mono text-[12.5px] tnum text-text w-14 text-right">
