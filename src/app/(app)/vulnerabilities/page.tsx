@@ -1,27 +1,39 @@
 'use client';
 
+/**
+ * Vulnerabilities — Command Center refit (Phase 2).
+ *
+ * Header + filter shape matches the design: search, severity select,
+ * date range, and a KEV-only toggle button that turns `--sev-crit`
+ * (filled flame) when active.
+ *
+ * EPSS isn't surfaced today because the field isn't on the existing
+ * schema (Phase 1 Roadmap, enrichment). When the backend ships it,
+ * add an `EPSS` column between `CVSS` and `KEV` (placeholder slot
+ * marked with a comment below) without other table changes.
+ *
+ * Row click → CVE drawer (deep-link to /vulnerabilities/[cveId] still
+ * works for sharable URLs).
+ */
+
 import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { vulns, type Vulnerability } from '@/lib/api';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { DateRangePicker, type DateRange } from '@/components/ui/date-range';
-import { EmptyState } from '@/components/ui/empty-state';
-import { Search, X, ShieldAlert, Shield } from 'lucide-react';
-import { cn, severityTone, cvssTone, relTime } from '@/lib/utils';
+import { Search, X, Flame } from 'lucide-react';
+import { cn, relTime } from '@/lib/utils';
+import { CcDataTable, type CcColumn } from '@/components/cc/data-table';
+import { Sev, normalizeSeverity, severityFromCvss, type Severity } from '@/components/cc/sev';
+import { useEntityDrawer } from '@/components/cc/entity-drawer';
 
 function toIso(d: Date | undefined): string | undefined {
-    if (!d) return undefined;
-    return d.toISOString().slice(0, 10); // YYYY-MM-DD
+    return d ? d.toISOString().slice(0, 10) : undefined;
 }
-
 function fromIso(s: string | null): Date | undefined {
     if (!s) return undefined;
     const t = Date.parse(s);
@@ -29,11 +41,11 @@ function fromIso(s: string | null): Date | undefined {
 }
 
 const SEVERITY_FILTERS = [
-    { value: 'all', label: 'Any severity' },
+    { value: 'all',      label: 'Any severity' },
     { value: 'critical', label: 'Critical' },
-    { value: 'high', label: 'High' },
-    { value: 'medium', label: 'Medium' },
-    { value: 'low', label: 'Low' },
+    { value: 'high',     label: 'High' },
+    { value: 'medium',   label: 'Medium' },
+    { value: 'low',      label: 'Low' },
 ];
 
 const PAGE_SIZE = 25;
@@ -42,15 +54,14 @@ export default function VulnerabilitiesPage() {
     const router = useRouter();
     const pathname = usePathname();
     const initialParams = useSearchParams();
+    const drawer = useEntityDrawer();
 
-    // URL is the source of truth so deep-links (e.g. /vulnerabilities?severity=critical)
-    // from the Overview / external bookmarks land on the right filter state.
     const [q, setQ] = useState(() => initialParams.get('q') ?? '');
     const [severity, setSeverity] = useState(() => initialParams.get('severity') ?? 'all');
     const [exploitedOnly, setExploitedOnly] = useState(() => initialParams.get('exploited') === 'true');
     const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
         const from = fromIso(initialParams.get('dateFrom'));
-        const to = fromIso(initialParams.get('dateTo'));
+        const to   = fromIso(initialParams.get('dateTo'));
         if (!from && !to) return undefined;
         return { from, to };
     });
@@ -60,16 +71,15 @@ export default function VulnerabilitiesPage() {
     });
 
     const dateFrom = toIso(dateRange?.from);
-    const dateTo = toIso(dateRange?.to);
+    const dateTo   = toIso(dateRange?.to);
 
-    // Sync state → URL. Skip params at their default so the URL stays clean.
     useEffect(() => {
         const next = new URLSearchParams();
         if (q) next.set('q', q);
         if (severity !== 'all') next.set('severity', severity);
         if (exploitedOnly) next.set('exploited', 'true');
         if (dateFrom) next.set('dateFrom', dateFrom);
-        if (dateTo) next.set('dateTo', dateTo);
+        if (dateTo)   next.set('dateTo',   dateTo);
         if (page > 1) next.set('page', String(page));
         const qs = next.toString();
         router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
@@ -91,106 +101,109 @@ export default function VulnerabilitiesPage() {
     const items = data?.items ?? [];
     const total = data?.pagination?.total ?? 0;
 
-    const columns: ColumnDef<Vulnerability>[] = [
+    const columns: CcColumn<Vulnerability>[] = [
         {
             id: 'cveId',
             header: 'CVE',
-            width: 'w-35',
-            accessor: r => r.cveId,
+            width: 'w-36',
             sortable: true,
-            cell: r => <span className="font-mono text-xs">{r.cveId ?? '—'}</span>,
+            cell: r => <span className="font-mono text-[12.5px] text-brand">{r.cveId ?? '—'}</span>,
         },
         {
             id: 'description',
             header: 'Description',
-            accessor: r => r.description,
-            cell: r => <span className="text-sm text-muted-foreground truncate block max-w-105">{r.description ?? '—'}</span>,
+            cell: r => (
+                <span className="text-[12.5px] text-text-2 truncate block max-w-[64ch]">
+                    {r.description ?? '—'}
+                </span>
+            ),
         },
         {
             id: 'vendor',
             header: 'Vendor / Product',
-            width: 'w-45',
-            accessor: r => [r.vendorProject, r.product].filter(Boolean).join(' / '),
+            width: 'w-44',
             sortable: true,
-            cell: r => <span className="text-xs text-muted-foreground truncate block max-w-45">{[r.vendorProject, r.product].filter(Boolean).join(' / ') || '—'}</span>,
+            cell: r => (
+                <span className="text-[11.5px] font-mono text-text-3 truncate block max-w-44">
+                    {[r.vendorProject, r.product].filter(Boolean).join(' / ') || '—'}
+                </span>
+            ),
         },
         {
             id: 'severity',
             header: 'Severity',
-            width: 'w-25',
-            accessor: r => r.severity,
+            width: 'w-24',
             sortable: true,
             cell: r => r.severity
-                ? <Badge variant="outline" className={cn('font-mono text-[10px] uppercase', severityTone(r.severity))}>{r.severity}</Badge>
-                : <span className="text-xs text-muted-foreground">—</span>,
+                ? <Sev level={normalizeSeverity(r.severity)} short />
+                : <span className="text-text-4">—</span>,
         },
         {
             id: 'cvss',
             header: 'CVSS',
-            width: 'w-18',
+            width: 'w-16',
             align: 'right',
-            accessor: r => r.cvssScore,
             sortable: true,
-            cell: r => <span className={cn('font-mono text-sm tabular-nums', cvssTone(r.cvssScore))}>{r.cvssScore != null ? r.cvssScore.toFixed(1) : '—'}</span>,
+            cell: r => {
+                if (r.cvssScore == null) return <span className="text-text-4">—</span>;
+                const sev = r.severity ? normalizeSeverity(r.severity) : severityFromCvss(r.cvssScore);
+                return (
+                    <span className={cn('font-mono text-[13px] tnum', cvssClass(sev))}>
+                        {r.cvssScore.toFixed(1)}
+                    </span>
+                );
+            },
         },
+        // EPSS column slot — uncomment once `r.epssScore` lands on the
+        // Vulnerability schema (Phase 1 Roadmap, enrichment phase 1).
+        // {
+        //     id: 'epss', header: 'EPSS', width: 'w-16', align: 'right', sortable: true,
+        //     cell: r => r.epssScore != null
+        //         ? <span className={cn('font-mono text-[12.5px] tnum', r.epssScore > 0.5 ? 'text-sev-high' : 'text-text-3')}>
+        //               {(r.epssScore * 100).toFixed(0)}%
+        //           </span>
+        //         : <span className="text-text-4">—</span>,
+        // },
         {
             id: 'kev',
             header: 'KEV',
-            width: 'w-20',
+            width: 'w-16',
             align: 'center',
-            accessor: r => r.isExploited ? 1 : 0,
             sortable: true,
             cell: r => r.isExploited
-                ? <ShieldAlert className="size-4 text-red-400 mx-auto" />
-                : <span className="text-xs text-muted-foreground">—</span>,
+                ? <Flame className="size-4 text-sev-crit mx-auto" aria-label="On CISA KEV catalog" />
+                : <span className="text-text-4">—</span>,
         },
         {
             id: 'published',
             header: 'Published',
-            width: 'w-20',
-            align: 'right',
-            accessor: r => r.publishedDate ? Date.parse(r.publishedDate) : null,
-            sortable: true,
-            cell: r => <span className="text-xs text-muted-foreground tabular-nums">{relTime(r.publishedDate)}</span>,
-        },
-        {
-            // Show NVD's `lastModified` (upstream "when did the source update
-            // this CVE") rather than our internal `updatedAt`. The OpenSearch
-            // indexer sets `updatedAt = lastModified` at index time, so the
-            // values are normally identical — but if `lastModified` is null
-            // we fall through to `updatedAt` then `publishedDate` rather than
-            // showing nothing.
-            id: 'lastModified',
-            header: 'Last modified',
             width: 'w-22',
             align: 'right',
-            accessor: r => {
-                const ts = r.lastModified ?? r.updatedAt ?? r.publishedDate;
-                return ts ? Date.parse(ts) : null;
-            },
             sortable: true,
-            cell: r => {
-                const ts = r.lastModified ?? r.updatedAt ?? r.publishedDate;
-                return <span className="text-xs text-muted-foreground tabular-nums">{relTime(ts)}</span>;
-            },
+            cell: r => <span className="text-[11.5px] text-text-3 font-mono tnum">{relTime(r.publishedDate)}</span>,
         },
     ];
 
+    const sevTint = (r: Vulnerability): Severity | null =>
+        r.severity ? normalizeSeverity(r.severity)
+        : r.cvssScore != null ? severityFromCvss(r.cvssScore)
+        : null;
+
     return (
-        <div className="space-y-6">
-            <div className="flex items-end justify-between gap-4 flex-wrap">
+        <div className="flex flex-col h-full gap-3">
+            <div className="flex items-end justify-between gap-4 flex-wrap shrink-0">
                 <div>
-                    <h1 className="text-3xl font-semibold tracking-tight">Vulnerabilities</h1>
-                    <p className="text-sm text-muted-foreground mt-1 tabular-nums">
-                        {isLoading ? 'Loading…' : `${total.toLocaleString()} CVEs from CISA KEV + ingested feeds`}
+                    <h1 className="h-page">Vulnerabilities</h1>
+                    <p className="sub tabular-nums mt-1">
+                        {isLoading ? 'Loading…' : `${total.toLocaleString()} CVEs · CISA KEV + ingested feeds`}
                     </p>
                 </div>
             </div>
 
             {/* Filters */}
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
                 <div className="relative flex-1 min-w-60 max-w-md">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-text-3" />
                     <Input
                         value={q}
                         onChange={(e) => { setQ(e.target.value); setPage(1); }}
@@ -200,7 +213,7 @@ export default function VulnerabilitiesPage() {
                     {q && (
                         <button
                             onClick={() => { setQ(''); setPage(1); }}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-text-3 hover:text-text"
                         >
                             <X className="size-3.5" />
                         </button>
@@ -222,37 +235,51 @@ export default function VulnerabilitiesPage() {
                     placeholder="Published date"
                     className="w-60"
                 />
-                <div className="flex items-center gap-2 px-2 h-9">
-                    <Switch
-                        id="exploited"
-                        checked={exploitedOnly}
-                        onCheckedChange={(v) => { setExploitedOnly(v); setPage(1); }}
-                    />
-                    <Label htmlFor="exploited" className="text-xs text-muted-foreground cursor-pointer">
-                        Known exploited only
-                    </Label>
-                </div>
+                {/* KEV-only toggle button — turns sev-crit fill when active. */}
+                <button
+                    type="button"
+                    onClick={() => { setExploitedOnly(v => !v); setPage(1); }}
+                    aria-pressed={exploitedOnly}
+                    className={cn(
+                        'inline-flex items-center gap-1.5 h-9 px-3 rounded-md border text-[12.5px] font-medium transition-colors',
+                        exploitedOnly
+                            ? 'bg-sev-crit-soft border-sev-crit text-sev-crit'
+                            : 'border-line-soft text-text-2 hover:text-text hover:bg-bg-2',
+                    )}
+                    title="Filter to CISA Known Exploited Vulnerabilities"
+                >
+                    <Flame className="size-3.5" />
+                    KEV only
+                </button>
             </div>
 
-            <DataTable
-                columns={columns}
-                data={items}
-                rowKey={r => r.id ?? r.cveId}
-                isLoading={isLoading}
-                onRowClick={r => router.push(`/vulnerabilities/${encodeURIComponent(r.cveId || r.id)}`)}
-                page={page}
-                pageSize={PAGE_SIZE}
-                total={total}
-                onPageChange={setPage}
-                density="compact"
-                emptyState={
-                    <EmptyState
-                        icon={Shield}
-                        title="No vulnerabilities in scope"
-                        description="No CVEs match the current filter set. Try widening the date range or clearing the severity / KEV filter."
-                    />
-                }
-            />
+            <div className="flex-1 min-h-0">
+                <CcDataTable
+                    columns={columns}
+                    data={items}
+                    rowKey={r => r.id ?? r.cveId}
+                    isLoading={isLoading}
+                    onRowClick={r => drawer.open({ type: 'cve', id: r.cveId || r.id })}
+                    sevtintFn={sevTint}
+                    page={page}
+                    pageSize={PAGE_SIZE}
+                    total={total}
+                    onPageChange={setPage}
+                    emptyState={
+                        <div className="py-4 text-[12.5px] text-text-3">
+                            No CVEs match the current filter set. Try widening the date range or clearing severity / KEV.
+                        </div>
+                    }
+                />
+            </div>
         </div>
     );
+}
+
+function cvssClass(sev: Severity): string {
+    return sev === 'crit' ? 'text-sev-crit'
+         : sev === 'high' ? 'text-sev-high'
+         : sev === 'med'  ? 'text-sev-med'
+         : sev === 'low'  ? 'text-sev-low'
+         : 'text-text-3';
 }
