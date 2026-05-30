@@ -281,7 +281,15 @@ export function CcDataTable<T>({
                 the remaining space. Cells truncate via `truncate block`
                 wrappers in the cell renderers. */}
             <div className="flex-1 min-h-0 overflow-auto">
-                <table className="w-full text-sm border-separate border-spacing-0 table-fixed">
+                {/* `min-w-270` (= 1080px) keeps the fixed column widths
+                    from crushing the un-widthed value column on narrow
+                    viewports. Without it, the sum of fixed widths
+                    (~728px for /iocs) eats most of the available space
+                    and the value column collapses to ~35px, truncating
+                    headers like "VALUE" → "VALI". On narrow screens
+                    the wrapper's overflow-auto allows horizontal scroll
+                    instead. */}
+                <table className="w-full min-w-270 text-sm border-separate border-spacing-0 table-fixed">
                     <colgroup>
                         {selection && <col style={{ width: '2.5rem' }} />}
                         {columns.map(col => (
