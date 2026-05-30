@@ -11,10 +11,63 @@ import { useState, type ReactNode } from 'react';
 import useSWR from 'swr';
 import { Copy, Check, Eye, Network as GraphIcon, FileText, Workflow, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { search, hitHref, hitLabel, normalizeEntityType, type SearchHit } from '@/lib/api';
+import {
+    search, hitHref, hitLabel, normalizeEntityType,
+    watch, type WatchEntityType, type SearchHit,
+} from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useEntityDrawer, type EntityKind } from './context';
 import { Sparkline } from '@/components/sparkline';
+
+/**
+ * Shared "is this entity pinned + a toggle handler" hook used by every
+ * drawer's Watch button. Encapsulates the three things that would
+ * otherwise duplicate across IOC/CVE/Actor content files:
+ *
+ *   1. `/v1/watch/check/:type/:id` on mount → initial button state
+ *   2. Optimistic flip on click → button feels instant even on slow nets
+ *   3. POST or DELETE depending on current state → toggle, not separate buttons
+ *
+ * SWR keys are scoped by `(type, id)` so opening two drawers (via the
+ * Related-pivot section) doesn't cross-pollute state. Re-mounting the
+ * drawer with the same target re-uses the cached value via SWR's
+ * dedupe.
+ */
+export function useWatchToggle(type: WatchEntityType, id: string | undefined) {
+    const { data, mutate } = useSWR(
+        id ? ['watch:check', type, id] : null,
+        () => watch.check(type, id!),
+        { revalidateOnFocus: false },
+    );
+    const watched = data?.watched ?? false;
+
+    const toggle = async () => {
+        if (!id) return;
+        // Optimistic flip — re-revalidate after the mutation either way.
+        try {
+            await mutate(
+                async () => {
+                    if (watched) {
+                        await watch.unpin(type, id);
+                        return { watched: false, createdAt: null };
+                    } else {
+                        const item = await watch.pin({ entityType: type, entityId: id });
+                        return { watched: true, createdAt: item.createdAt ?? null };
+                    }
+                },
+                {
+                    optimisticData: { watched: !watched, createdAt: watched ? null : new Date().toISOString() },
+                    rollbackOnError: true,
+                },
+            );
+            toast.success(watched ? 'Unwatched' : 'Added to watch list');
+        } catch (e) {
+            toast.error((e as Error).message || 'Watch failed');
+        }
+    };
+
+    return { watched, toggle };
+}
 
 export function DrawerSection({
     title, children, className,
