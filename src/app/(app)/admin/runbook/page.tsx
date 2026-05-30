@@ -36,7 +36,6 @@ import {
     Workflow, Wrench, Siren, RefreshCw, ListChecks, Database,
 } from 'lucide-react';
 import { cn, relTime } from '@/lib/utils';
-import { PageHeader } from '@/components/admin/page-header';
 import { StatusTile } from '@/components/admin/stat';
 
 const REFRESH_MS = 30_000;
@@ -74,22 +73,24 @@ export default function AdminRunbookPage() {
     }
 
     return (
-        <div className="space-y-6">
-            <PageHeader
-                title="Runbook"
-                description="Open this page first when something is on fire. Live dependency health + currently-firing failure groups up top; copy-pasteable procedures and a five-step incident checklist below."
-                actions={
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => { refetchServices(); refetchFailures(); }}
-                        disabled={isLoading}
-                    >
-                        <RefreshCw className={cn('size-3.5', isLoading && 'animate-spin')} />
-                        Refresh now
-                    </Button>
-                }
-            />
+        <div className="space-y-4">
+            <div className="flex items-end justify-between gap-4 flex-wrap">
+                <div className="max-w-3xl">
+                    <h1 className="h-page">Runbook</h1>
+                    <p className="sub mt-1">
+                        Open this page first when something is on fire. Live dependency health and currently-firing failure groups up top; copy-pasteable procedures and an incident checklist below.
+                    </p>
+                </div>
+                <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => { refetchServices(); refetchFailures(); }}
+                    disabled={isLoading}
+                >
+                    <RefreshCw className={cn('size-3.5', isLoading && 'animate-spin')} />
+                    Refresh now
+                </Button>
+            </div>
 
             {/* ── Service summary + live dependencies ────────────────────────── */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

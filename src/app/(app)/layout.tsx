@@ -22,6 +22,7 @@ import { BuildBadge } from '@/components/build-badge';
 import { TweaksProvider } from '@/components/cc/tweaks';
 import { Topbar } from '@/components/cc/topbar';
 import { EntityDrawerProvider, EntityDrawer } from '@/components/cc/entity-drawer';
+import { AttentionRail } from '@/components/cc/attention-rail';
 
 /**
  * Command Center sidebar — four semantic groups instead of one flat list.
@@ -164,9 +165,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
                 <SidebarInset>
                     <Topbar />
-                    <main className="flex-1 overflow-auto p-4 sm:p-6 pb-20 md:pb-6">
-                        {children}
-                    </main>
+                    <div className="flex flex-1 min-h-0">
+                        <main className="flex-1 overflow-auto p-4 sm:p-6 pb-20 md:pb-6 min-w-0">
+                            {children}
+                        </main>
+                        <AttentionRail />
+                    </div>
                 </SidebarInset>
 
                 <MobileBottomNav />
