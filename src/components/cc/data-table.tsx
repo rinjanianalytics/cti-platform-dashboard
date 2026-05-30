@@ -30,13 +30,33 @@
  * about what they're sorting.
  */
 
-import { type ReactNode } from 'react';
+import { type ReactNode, type CSSProperties } from 'react';
 import { ChevronDown, ChevronUp, ChevronsUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useTweaks, type DensityKey } from './tweaks';
 import { Segmented } from './segmented';
 import type { Severity } from './sev';
+
+/**
+ * Tailwind `w-N` → CSS width string (N × 0.25rem). Returns `undefined` for
+ * un-widthed or non-spacing values so `<col>` claims its share of the
+ * table's remaining space.
+ *
+ * Inline styles are used on `<col>` instead of className because some
+ * Tailwind v4 + Turbopack pipelines drop classes that only ever appear on
+ * `<col>` elements from the generated CSS bundle, leaving the colgroup
+ * widthless and the body cells negotiating widths against header cells
+ * (which DO have working classes via `<th>`) — the head/body shift the
+ * user sees in /iocs, /vulnerabilities, /actors. Parsing to inline CSS
+ * sidesteps the whole Tailwind layer here.
+ */
+function colWidthStyle(cls: string | undefined): CSSProperties | undefined {
+    if (!cls) return undefined;
+    const m = cls.match(/^w-(\d+)$/);
+    if (!m) return undefined;
+    return { width: `${Number(m[1]) * 0.25}rem` };
+}
 
 export type SortDir = 'asc' | 'desc';
 export interface SortState { id: string; dir: SortDir }
@@ -182,7 +202,10 @@ export function CcDataTable<T>({
                     } : undefined}
                 >
                     {selection && (
-                        <td className={cn('pl-3', cellY)} data-row-checkbox>
+                        <td
+                            className={cn('pl-3', cellY)}
+                            data-row-checkbox
+                        >
                             <input
                                 type="checkbox"
                                 checked={isSelected}
@@ -194,12 +217,13 @@ export function CcDataTable<T>({
                         </td>
                     )}
                     {columns.map(col => (
+                        // No inline width on <td> — the colgroup is the single
+                        // source of column widths. Inline widths on body cells
+                        // caused them to layout independently of the header in
+                        // table-auto mode, producing the head/body column
+                        // shift we saw in the DevTools dump.
                         <td
                             key={col.id}
-                            // `overflow-hidden` is a safety net — `<col>` sets
-                            // the column width; a cell renderer that forgets
-                            // `truncate` would otherwise paint into the next
-                            // column.
                             className={cn(
                                 'px-3 overflow-hidden',
                                 cellY,
@@ -256,17 +280,41 @@ export function CcDataTable<T>({
                 the remaining space. Cells truncate via `truncate block`
                 wrappers in the cell renderers. */}
             <div className="flex-1 min-h-0 overflow-auto">
-                <table className="w-full text-sm border-separate border-spacing-0 table-fixed">
+                {/* `table-auto` (default `table-layout`) — head and body
+                    cells negotiate widths together across the whole
+                    table, so columns ALWAYS align. With `table-fixed`,
+                    Chromium occasionally rendered head and body with
+                    different effective column widths despite identical
+                    inline widths on <col>/<th>/<td>; switching to auto
+                    eliminates that class of bug.
+
+                    `min-w-270` (1080px) keeps the table at least
+                    1080px wide on narrow viewports so the un-widthed
+                    columns don't collapse; the wrapper's overflow-auto
+                    allows horizontal scroll instead. */}
+                <table className="w-full min-w-270 text-sm border-separate border-spacing-0 table-auto">
                     <colgroup>
-                        {selection && <col className="w-10" />}
+                        {selection && <col style={{ width: '2.5rem' }} />}
                         {columns.map(col => (
-                            <col key={col.id} className={col.width} />
+                            <col key={col.id} style={colWidthStyle(col.width)} />
                         ))}
                     </colgroup>
-                    <thead>
+                    {/* `position: sticky` on <thead> instead of each <th>.
+                        Sticky-on-th causes Chromium to exclude the cell from
+                        the table's auto column-width pass — body cells then
+                        compute widths independently and shift one column
+                        right of the header. Sticky on <thead> keeps the
+                        whole row pinned without breaking column negotiation.
+                        The bg-bg-2 underline lives on a span inside the th
+                        because <thead> backgrounds don't paint reliably
+                        when sticky. */}
+                    <thead className="sticky top-0 z-10 bg-bg-2">
                         <tr>
                             {selection && (
-                                <th className="pl-3 py-2 text-left sticky top-0 z-10 bg-bg-2 border-b border-line-soft">
+                                <th
+                                    style={{ width: '2.5rem' }}
+                                    className="pl-3 py-2 text-left border-b border-line-soft"
+                                >
                                     <input
                                         type="checkbox"
                                         checked={allOnPageSelected}
@@ -279,12 +327,14 @@ export function CcDataTable<T>({
                             )}
                             {columns.map(col => {
                                 const sortedByMe = sort?.id === col.id;
+                                const widthStyle = colWidthStyle(col.width);
                                 return (
                                     <th
                                         key={col.id}
+                                        style={widthStyle}
                                         className={cn(
                                             'px-3 py-2 text-left font-medium text-[11px] text-text-3',
-                                            'sticky top-0 z-10 bg-bg-2 border-b border-line-soft',
+                                            'border-b border-line-soft',
                                             col.align === 'right' && 'text-right',
                                             col.align === 'center' && 'text-center',
                                             col.sortable && 'cursor-pointer select-none hover:text-text',

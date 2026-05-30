@@ -48,6 +48,26 @@ const WINDOW_OPTIONS = [
 ] as const;
 
 /**
+ * Map the window switcher to a `days` count for the API.
+ * `24H` resolves to 2 days so deltaPct still has a previous bucket to
+ * compare against — a 1-day series would have nothing to diff. The
+ * sparkline trims the partial-day bucket via `trimPartialDay()` before
+ * rendering, so the visible window matches the user's selection.
+ */
+const WINDOW_DAYS: Record<WindowKey, number> = {
+    '24H': 2,
+    '7D':  7,
+    '30D': 30,
+};
+
+/** The landscape endpoint takes a string `period` rather than a `days` int. */
+const WINDOW_PERIOD: Record<WindowKey, '24h' | '7d' | '30d'> = {
+    '24H': '24h',
+    '7D':  '7d',
+    '30D': '30d',
+};
+
+/**
  * Direct CSS variable refs for the severity bars, used in place of the
  * `bg-sev-*` Tailwind utilities. Reason: the panel's track colour
  * (`--bg-3`) is only defined inside `.dark`, and Tailwind 4's
@@ -67,13 +87,35 @@ const SEV_BAR_VAR: Record<Severity, string> = {
 
 export default function CommandPage() {
     const [windowSel, setWindowSel] = useState<WindowKey>('7D');
+    const windowDays = WINDOW_DAYS[windowSel];
+    const windowPeriod = WINDOW_PERIOD[windowSel];
 
-    const { data: stats }     = useSWR('cc:stats',     () => platform.stats());
-    const { data: landscape } = useSWR('cc:landscape', () => platform.landscape());
-    const { data: sparks }    = useSWR('cc:sparks',    () => platform.sparklines(7), { refreshInterval: 60_000 });
+    // Every windowed SWR key includes `windowDays` so SWR refetches
+    // when the switcher fires. Each tile then either reads from the
+    // window-scoped response field (windowCounts / total / etc.) or
+    // recomputes derivatives (deltaPct(sparks.X)) automatically.
+    const { data: stats }     = useSWR(
+        ['cc:stats', windowDays] as const,
+        ([, days]) => platform.stats({ days }),
+    );
+    const { data: landscape } = useSWR(
+        ['cc:landscape', windowPeriod] as const,
+        ([, period]) => platform.landscape({ period }),
+    );
+    const { data: sparks }    = useSWR(
+        ['cc:sparks', windowDays] as const,
+        ([, days]) => platform.sparklines(days),
+        { refreshInterval: 60_000 },
+    );
     const { data: coverage }  = useSWR('cc:mitre',     () => platform.mitreCoverage());
-    const { data: actors }    = useSWR('cc:actors',    () => platform.activeActors(6));
-    const { data: trending }  = useSWR('cc:trending',  () => platform.trendingTags());
+    const { data: actors }    = useSWR(
+        ['cc:actors', windowDays] as const,
+        ([, days]) => platform.activeActors(6, days),
+    );
+    const { data: trending }  = useSWR(
+        ['cc:trending', windowDays] as const,
+        ([, days]) => platform.trendingTags({ days }),
+    );
     const { data: feeds }     = useSWR('cc:feeds',     () => platform.feedMonitoring());
     const { data: pulses }    = useSWR('cc:pulses',    () => pulsesApi.list({ pageSize: 5 }));
     const { data: triage }    = useSWR('cc:triage',    () => iocs.list({ severity: 'critical', pageSize: 5 }));
@@ -118,12 +160,18 @@ export default function CommandPage() {
                 </div>
             </header>
 
-            {/* ── KPI strip ────────────────────────────────────────────── */}
+            {/* ── KPI strip ──────────────────────────────────────────────
+                Tile values prefer `windowCounts` (arrivals in the selected
+                window) over `counts` (total-of-record) so they read as
+                "new this week / this 24h" — matching the rolling-window
+                label above. `windowCounts` is only present when the
+                backend includes it (older API revs fall back to totals
+                gracefully). */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <KpiTile
                     href="/iocs"
                     eyebrow="Indicators"
-                    value={stats?.counts.iocs}
+                    value={stats?.windowCounts?.iocs ?? stats?.counts.iocs}
                     sparkData={trimPartialDay(sparks?.iocs)}
                     sparkTone="brand"
                     delta={deltaPct(sparks?.iocs)}
@@ -134,7 +182,7 @@ export default function CommandPage() {
                 <KpiTile
                     href="/vulnerabilities"
                     eyebrow="Vulnerabilities"
-                    value={stats?.counts.vulnerabilities}
+                    value={stats?.windowCounts?.vulnerabilities ?? stats?.counts.vulnerabilities}
                     sparkData={trimPartialDay(sparks?.vulnerabilities)}
                     sparkTone="sev-high"
                     delta={deltaPct(sparks?.vulnerabilities)}
@@ -145,20 +193,20 @@ export default function CommandPage() {
                 <KpiTile
                     href="/actors"
                     eyebrow="Threat actors"
-                    value={stats?.counts.threatActors}
+                    value={stats?.windowCounts?.threatActors ?? stats?.counts.threatActors}
                     sparkData={trimPartialDay(sparks?.threatActors)}
                     sparkTone="sev-info"
                     delta={deltaPct(sparks?.threatActors)}
-                    // `actors.total` is the real count of actors active
-                    // in the last 7 days (added in cti-platform-api PR
-                    // #19). `actors.actors.length` is just the top-N
-                    // rendered in the Watchlist and would lie to the
-                    // user — "6 active this week" regardless of the
-                    // real population, or "0" when the request limit
-                    // was tiny. Fall back to the array length while
-                    // older API versions are still in rotation.
+                    // `actors.total` is the count of actors with
+                    // last_seen within the user's selected window
+                    // (`?days=N` on /v1/actors/active — cti-platform-api
+                    // PR #21). The sub-line label tracks the window so
+                    // "active this week / today / this month" matches
+                    // what the user picked. `actors.actors.length` is
+                    // the top-N watchlist (capped at limit=6) and would
+                    // lie if read here.
                     sub={actors
-                        ? `${actors.total ?? actors.actors.length} active this week`
+                        ? `${actors.total ?? actors.actors.length} active ${windowSel === '24H' ? 'today' : windowSel === '30D' ? 'this month' : 'this week'}`
                         : undefined}
                 />
                 <KpiTile
