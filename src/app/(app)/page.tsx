@@ -148,7 +148,17 @@ export default function CommandPage() {
                     sparkData={trimPartialDay(sparks?.threatActors)}
                     sparkTone="sev-info"
                     delta={deltaPct(sparks?.threatActors)}
-                    sub={actors ? `${actors.actors.length} active this week` : undefined}
+                    // `actors.total` is the real count of actors active
+                    // in the last 7 days (added in cti-platform-api PR
+                    // #19). `actors.actors.length` is just the top-N
+                    // rendered in the Watchlist and would lie to the
+                    // user — "6 active this week" regardless of the
+                    // real population, or "0" when the request limit
+                    // was tiny. Fall back to the array length while
+                    // older API versions are still in rotation.
+                    sub={actors
+                        ? `${actors.total ?? actors.actors.length} active this week`
+                        : undefined}
                 />
                 <KpiTile
                     href="/feeds"
