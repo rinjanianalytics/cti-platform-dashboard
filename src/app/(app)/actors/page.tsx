@@ -1,5 +1,25 @@
 'use client';
 
+/**
+ * Threat actors — Command Center refit (Phase 2).
+ *
+ * Per the design spec:
+ *   - Name column carries the actor name (sans 600) + one-line description
+ *     underneath (text-3, ellipsis)
+ *   - Aliases column is mono, truncated
+ *   - Sophistication is a sev-style pill (strategic → crit, advanced/
+ *     expert → high, intermediate → med, minimal → low, else → info).
+ *     Reuses the Sev component instead of growing a bespoke colour map.
+ *   - Resource is an uppercase chip
+ *   - Activity column on the right = score bar + number; we don't have
+ *     a per-actor score on the list endpoint (the Overview's
+ *     activeActors does; the list endpoint doesn't), so we render the
+ *     `confidence` field as a visual stand-in until the backend
+ *     surfaces a real activity score (Phase 3).
+ *
+ * Row click → actor drawer.
+ */
+
 import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -9,18 +29,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
     Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { DataTable, type ColumnDef } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-state';
-import { Plus, Search, X, Users, Sparkles } from 'lucide-react';
+import { Plus, Search, X, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { relTime } from '@/lib/utils';
+import { cn, relTime } from '@/lib/utils';
+import { CcDataTable, type CcColumn } from '@/components/cc/data-table';
+import { Sev, type Severity } from '@/components/cc/sev';
+import { useEntityDrawer } from '@/components/cc/entity-drawer';
 
 const SOPHISTICATION = ['none', 'minimal', 'intermediate', 'advanced', 'expert', 'innovator', 'strategic'] as const;
 const RESOURCE_LEVELS = ['individual', 'club', 'contest', 'team', 'organization', 'government'] as const;
@@ -29,26 +49,14 @@ const MOTIVATIONS = [
     'organizational-gain', 'personal-gain', 'personal-satisfaction', 'revenge', 'unpredictable',
 ] as const;
 
-const SOPH_TONE: Record<string, string> = {
-    strategic: 'bg-red-500/15 text-red-400 border-red-500/30',
-    innovator: 'bg-fuchsia-500/15 text-fuchsia-400 border-fuchsia-500/30',
-    expert: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-    advanced: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
-    intermediate: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-    minimal: 'bg-slate-500/15 text-slate-400 border-slate-500/30',
-    none: 'bg-slate-500/15 text-slate-400 border-slate-500/30',
-};
-
-// Resource level → tone. State-sponsored / org-scale actors are amber/red;
-// individuals and amateur groups stay muted.
-const RESOURCE_TONE: Record<string, string> = {
-    government: 'bg-red-500/15 text-red-400 border-red-500/30',
-    organization: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-    team: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-    contest: 'bg-slate-500/15 text-slate-400 border-slate-500/30',
-    club: 'bg-slate-500/15 text-slate-400 border-slate-500/30',
-    individual: 'bg-slate-500/15 text-slate-400 border-slate-500/30',
-};
+function sophisticationToSev(raw: string | null | undefined): Severity {
+    const s = (raw ?? '').toLowerCase();
+    if (s === 'strategic') return 'crit';
+    if (s === 'advanced' || s === 'expert' || s === 'innovator') return 'high';
+    if (s === 'intermediate') return 'med';
+    if (s === 'minimal') return 'low';
+    return 'info';
+}
 
 const PAGE_SIZE = 25;
 
@@ -56,6 +64,7 @@ export default function ActorsPage() {
     const router = useRouter();
     const pathname = usePathname();
     const initialParams = useSearchParams();
+    const drawer = useEntityDrawer();
 
     const [q, setQ] = useState(() => initialParams.get('q') ?? '');
     const [sophistication, setSophistication] = useState(() => initialParams.get('sophistication') ?? 'all');
@@ -79,6 +88,20 @@ export default function ActorsPage() {
         router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     }, [q, sophistication, motivation, page, pathname, router]);
 
+    const { data, isLoading, mutate } = useSWR(
+        ['actors', q, sophistication, motivation, page],
+        () => actors.list({
+            page,
+            pageSize: PAGE_SIZE,
+            q: q || undefined,
+            sophistication: sophistication === 'all' ? undefined : sophistication,
+            motivation: motivation === 'all' ? undefined : motivation,
+        }),
+    );
+
+    const items = data?.items ?? [];
+    const total = data?.pagination?.total ?? 0;
+
     const onBulkEnrich = async () => {
         if (!confirm('Enrich up to 50 actors with missing fields via Gemini? This may take a few minutes.')) return;
         setBulkEnriching(true);
@@ -94,33 +117,18 @@ export default function ActorsPage() {
         }
     };
 
-    const { data, isLoading, mutate } = useSWR(
-        ['actors', q, sophistication, motivation, page],
-        () => actors.list({
-            page,
-            pageSize: PAGE_SIZE,
-            q: q || undefined,
-            sophistication: sophistication === 'all' ? undefined : sophistication,
-            motivation: motivation === 'all' ? undefined : motivation,
-        }),
-    );
+    const maxActivity = items.reduce((m, a) => Math.max(m, a.confidence ?? 0), 1);
 
-    const items = data?.items ?? [];
-    const total = data?.pagination?.total ?? 0;
-
-    const columns: ColumnDef<ThreatActor>[] = [
+    const columns: CcColumn<ThreatActor>[] = [
         {
             id: 'name',
             header: 'Name',
-            accessor: a => a.name,
             sortable: true,
             cell: a => (
                 <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{a.name}</div>
+                    <div className="text-[13px] font-semibold truncate">{a.name}</div>
                     {a.description && (
-                        <div className="text-[11px] text-muted-foreground truncate max-w-105">
-                            {a.description}
-                        </div>
+                        <div className="text-[11px] text-text-3 truncate max-w-[60ch]">{a.description}</div>
                     )}
                 </div>
             ),
@@ -128,68 +136,88 @@ export default function ActorsPage() {
         {
             id: 'aliases',
             header: 'Aliases',
-            width: 'w-50',
-            accessor: a => a.aliases?.join(', '),
+            width: 'w-52',
             cell: a => {
                 const aliases = a.aliases ?? [];
-                return <span className="text-xs text-muted-foreground truncate block max-w-50">{aliases.length > 0 ? aliases.slice(0, 3).join(' · ') : '—'}</span>;
+                return (
+                    <span className="font-mono text-[11.5px] text-text-3 truncate block max-w-52">
+                        {aliases.length > 0 ? aliases.slice(0, 3).join(' · ') : '—'}
+                    </span>
+                );
             },
         },
         {
             id: 'sophistication',
             header: 'Sophistication',
             width: 'w-32',
-            accessor: a => a.sophistication,
             sortable: true,
             cell: a => a.sophistication
-                ? <Badge variant="outline" className={`font-mono text-[10px] uppercase ${SOPH_TONE[a.sophistication] ?? ''}`}>{a.sophistication}</Badge>
-                : <span className="text-xs text-muted-foreground">—</span>,
+                ? <Sev level={sophisticationToSev(a.sophistication)} short />
+                : <span className="text-text-4">—</span>,
         },
         {
             id: 'motivation',
             header: 'Motivation',
             width: 'w-40',
-            accessor: a => a.primaryMotivation,
             sortable: true,
-            cell: a => <span className="text-xs text-muted-foreground capitalize">{a.primaryMotivation ? a.primaryMotivation.replace(/-/g, ' ') : '—'}</span>,
+            cell: a => (
+                <span className="text-[12px] text-text-2 capitalize">
+                    {a.primaryMotivation ? a.primaryMotivation.replace(/-/g, ' ') : '—'}
+                </span>
+            ),
         },
         {
             id: 'resourceLevel',
             header: 'Resource',
-            width: 'w-30',
-            accessor: a => a.resourceLevel,
+            width: 'w-28',
             sortable: true,
             cell: a => a.resourceLevel
-                ? <Badge variant="outline" className={`font-mono text-[10px] uppercase ${RESOURCE_TONE[a.resourceLevel] ?? ''}`}>{a.resourceLevel}</Badge>
-                : <span className="text-xs text-muted-foreground">—</span>,
+                ? <span className="chip uppercase text-text-3">{a.resourceLevel}</span>
+                : <span className="text-text-4">—</span>,
         },
         {
-            // Prefer upstream `lastSeen` over scheduler `updatedAt` so the column
-            // answers "when was this actor last active per the data source",
-            // not "when did our cron last touch the row". Falls back to
-            // `stixModified` then `firstSeen` when `lastSeen` isn't recorded.
+            id: 'activity',
+            header: 'Activity',
+            width: 'w-36',
+            align: 'right',
+            sortable: true,
+            cell: a => {
+                const v = a.confidence ?? 0;
+                if (v === 0) return <span className="text-text-4 text-[11px]">—</span>;
+                const hot = v > 70;
+                return (
+                    <span className="inline-flex items-center gap-2 justify-end">
+                        <span className="w-22.5 h-1.5 bg-bg-3 rounded-full overflow-hidden">
+                            <span
+                                className={cn('block h-full rounded-full', hot ? 'bg-sev-high' : 'bg-brand')}
+                                style={{ width: `${(v / maxActivity) * 100}%` }}
+                            />
+                        </span>
+                        <span className="font-mono text-[11.5px] tnum text-text-2 w-7 text-right">{v}</span>
+                    </span>
+                );
+            },
+        },
+        {
             id: 'lastSeen',
             header: 'Last seen',
             width: 'w-22',
             align: 'right',
-            accessor: a => {
-                const ts = a.lastSeen ?? a.stixModified ?? a.firstSeen;
-                return ts ? Date.parse(ts) : null;
-            },
             sortable: true,
             cell: a => {
                 const ts = a.lastSeen ?? a.stixModified ?? a.firstSeen;
-                return <span className="text-xs text-muted-foreground tabular-nums">{relTime(ts)}</span>;
+                return <span className="text-[11.5px] text-text-3 font-mono tnum">{relTime(ts)}</span>;
             },
         },
     ];
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-end justify-between gap-4 flex-wrap">
+        <div className="flex flex-col h-full gap-3">
+            {/* Header */}
+            <div className="flex items-end justify-between gap-4 flex-wrap shrink-0">
                 <div>
-                    <h1 className="text-3xl font-semibold tracking-tight">Threat actors</h1>
-                    <p className="text-sm text-muted-foreground mt-1 tabular-nums">
+                    <h1 className="h-page">Threat actors</h1>
+                    <p className="sub tabular-nums mt-1">
                         {isLoading ? 'Loading…' : `${total.toLocaleString()} tracked groups and individuals`}
                     </p>
                 </div>
@@ -217,9 +245,9 @@ export default function ActorsPage() {
             </div>
 
             {/* Filters */}
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
                 <div className="relative flex-1 min-w-60 max-w-md">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-text-3" />
                     <Input
                         value={q}
                         onChange={(e) => { setQ(e.target.value); setPage(1); }}
@@ -229,7 +257,7 @@ export default function ActorsPage() {
                     {q && (
                         <button
                             onClick={() => { setQ(''); setPage(1); }}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-text-3 hover:text-text"
                         >
                             <X className="size-3.5" />
                         </button>
@@ -259,26 +287,24 @@ export default function ActorsPage() {
                 </Select>
             </div>
 
-            <DataTable
-                columns={columns}
-                data={items}
-                rowKey={a => a.id}
-                isLoading={isLoading}
-                onRowClick={a => router.push(`/actors/${encodeURIComponent(a.id)}`)}
-                page={page}
-                pageSize={PAGE_SIZE}
-                total={total}
-                onPageChange={setPage}
-                density="compact"
-                emptyState={
-                    <EmptyState
-                        icon={Users}
-                        title="No actors tracked"
-                        description="No threat actors match the current filter set. Add one manually, or wait for STIX-bundle ingest to populate."
-                        action={{ label: 'New actor', onClick: () => setCreateOpen(true) }}
-                    />
-                }
-            />
+            <div className="flex-1 min-h-0">
+                <CcDataTable
+                    columns={columns}
+                    data={items}
+                    rowKey={a => a.id}
+                    isLoading={isLoading}
+                    onRowClick={a => drawer.open({ type: 'actor', id: a.id })}
+                    page={page}
+                    pageSize={PAGE_SIZE}
+                    total={total}
+                    onPageChange={setPage}
+                    emptyState={
+                        <div className="py-4 text-[12.5px] text-text-3">
+                            No actors match the current filter set. Add one manually, or wait for STIX-bundle ingest.
+                        </div>
+                    }
+                />
+            </div>
         </div>
     );
 }

@@ -199,11 +199,11 @@ export default function GraphExplorerPage() {
     }, [mode]);
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             <div className="flex items-end justify-between gap-4 flex-wrap">
                 <div>
-                    <h1 className="text-3xl font-semibold tracking-tight">Graph explorer</h1>
-                    <p className="text-sm text-muted-foreground mt-1">
+                    <h1 className="h-page">Graph explorer</h1>
+                    <p className="sub mt-1">
                         Neo4j-backed CTI analysis. Pick a mode, enter a value, then click nodes to traverse.
                     </p>
                 </div>
