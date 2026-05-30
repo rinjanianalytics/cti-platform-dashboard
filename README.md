@@ -12,11 +12,19 @@ Paired with [cti-platform-api](https://github.com/rinjanianalytics/cti-platform-
 
 ---
 
+## 📸 Screenshot
+
+![Threat Command — analyst dashboard](docs/screenshots/dashboard.png)
+
+The Command page (`/`) is the analyst's at-a-glance entry point: KPI tiles with rolling-window sparklines and delta %, a CRIT-IOC priority triage queue, severity distribution, ATT&CK coverage, indicator types, trending tags, actor watchlist, and a semantic events stream (KEV adds, high-CVSS CVEs, new actors, big pulses, sync failures). The 24H / 7D / 30D switcher scopes every tile and panel to the selected window.
+
+---
+
 ## 🚀 What it shows
 
 | Surface | Lives at | Renders |
 |---------|----------|---------|
-| **Overview** | `/` | At-a-glance health: vuln severity buckets, MITRE techniques, active actor watchlist, KEV count, recent IOCs |
+| **Command** | `/` | KPI strip + priority triage + severity distribution + ATT&CK coverage + actor watchlist + events stream + trending tags; everything respects a 24H/7D/30D rolling window switcher |
 | **Vulnerabilities** | `/vulnerabilities` | Paginated CVE/KEV list with CVSS, severity, KEV-toggle filter, upstream first/last-seen timestamps |
 | **IOCs** | `/iocs` | IPs / domains / hashes / URLs with type filter, type-ahead search, verdict pills |
 | **Threat actors** | `/actors` | APT groups + composite activity-scored watchlist (feed mentions × recency × IOC count × MITRE coverage) — not just `last_seen DESC` |
