@@ -196,8 +196,15 @@ export function CcDataTable<T>({
                     {columns.map(col => (
                         <td
                             key={col.id}
+                            // `overflow-hidden` on the cell is a safety net for
+                            // `table-fixed` — without it, a cell renderer that
+                            // forgets `truncate` would paint its content over
+                            // the next column, defeating the alignment fix.
+                            // The cell's column width is determined by the
+                            // <th> in table-fixed mode; this just clips the
+                            // visual overflow.
                             className={cn(
-                                'px-3',
+                                'px-3 overflow-hidden',
                                 cellY,
                                 col.width,
                                 col.align === 'right' && 'text-right',
@@ -234,13 +241,33 @@ export function CcDataTable<T>({
                 </div>
             )}
 
-            {/* Scrollable table body */}
+            {/* Scrollable table body.
+                `table-fixed` keeps the headers and body cells aligned even
+                when row content (a 64-char hash, a long IOC value) is wider
+                than the header label. Without it (`table-layout: auto`),
+                each column negotiates its width against the widest cell in
+                that column — but `position: sticky` on `<thead>` falls
+                outside that negotiation in Chromium, so the headers ended
+                up rendering at their min-content widths while the body
+                cells stretched. Result: a noticeable column-by-column
+                shift visible in every Investigate table.
+
+                Sticky positioning moves from `<thead>` (where it broke
+                width negotiation) to each `<th>` cell (where it stays in
+                the column layout but still pins to the scroll container's
+                top edge).
+
+                In `table-fixed` mode the first row's widths drive the
+                whole table — columns with `col.width` get exactly that;
+                the un-widthed `value` column claims the remaining space.
+                Long content inside cells truncates via `truncate`/`block`
+                wrappers on the cell renderers (already in place). */}
             <div className="flex-1 min-h-0 overflow-auto">
-                <table className="w-full text-sm border-separate border-spacing-0">
-                    <thead className="sticky top-0 z-10 bg-bg-2">
+                <table className="w-full text-sm border-separate border-spacing-0 table-fixed">
+                    <thead>
                         <tr>
                             {selection && (
-                                <th className="w-10 pl-3 py-2 text-left">
+                                <th className="w-10 pl-3 py-2 text-left sticky top-0 z-10 bg-bg-2 border-b border-line-soft">
                                     <input
                                         type="checkbox"
                                         checked={allOnPageSelected}
@@ -257,7 +284,8 @@ export function CcDataTable<T>({
                                     <th
                                         key={col.id}
                                         className={cn(
-                                            'px-3 py-2 text-left font-medium text-[11px] text-text-3 border-b border-line-soft',
+                                            'px-3 py-2 text-left font-medium text-[11px] text-text-3',
+                                            'sticky top-0 z-10 bg-bg-2 border-b border-line-soft',
                                             col.width,
                                             col.align === 'right' && 'text-right',
                                             col.align === 'center' && 'text-center',
