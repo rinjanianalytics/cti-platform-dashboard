@@ -3,26 +3,27 @@
 /**
  * IOC content panel — drawer body for a single indicator.
  * Renders: title row, action row, attributes, tags, related, trend,
- * footer. Watch is wired to the existing verdict API (mark as
- * `suspicious` until a real watchlist endpoint exists).
+ * footer. Watch is wired to /v1/watch (was a verdict stand-in
+ * before the watch endpoint shipped in cti-platform-api PR #20).
  */
 
 import useSWR from 'swr';
-import { toast } from 'sonner';
 import { iocs } from '@/lib/api';
 import { relTime } from '@/lib/utils';
 import { Sev, normalizeSeverity } from '../sev';
 import { ConfBar } from '../conf-bar';
 import {
     DrawerSection, AttrList, TagsRow, DrawerActions,
-    RelatedSection, SightingTrend, DrawerFooter,
+    RelatedSection, SightingTrend, DrawerFooter, useWatchToggle,
 } from './shared';
 
 export function IocContent({ id }: { id: string }) {
-    const { data, isLoading, mutate } = useSWR(
+    const { data, isLoading } = useSWR(
         ['drawer:ioc', id],
         () => iocs.get(id),
     );
+
+    const { watched, toggle: handleWatch } = useWatchToggle('ioc', data?.id);
 
     if (isLoading) {
         return <DrawerSection><div className="text-text-3 text-[12.5px]">Loading…</div></DrawerSection>;
@@ -32,16 +33,6 @@ export function IocContent({ id }: { id: string }) {
     }
 
     const sev = normalizeSeverity(data.severity);
-
-    const handleWatch = async () => {
-        try {
-            await iocs.setVerdict(data.id, 'suspicious', 'Marked from drawer watch');
-            await mutate();
-            toast.success('Added to watch list');
-        } catch (e) {
-            toast.error((e as Error).message || 'Watch failed');
-        }
-    };
 
     return (
         <>
@@ -59,7 +50,12 @@ export function IocContent({ id }: { id: string }) {
 
             {/* Actions */}
             <DrawerSection>
-                <DrawerActions pivotValue={data.value} copyValue={data.value} onWatch={handleWatch} />
+                <DrawerActions
+                    pivotValue={data.value}
+                    copyValue={data.value}
+                    onWatch={handleWatch}
+                    watchActive={watched}
+                />
             </DrawerSection>
 
             {/* Attributes */}

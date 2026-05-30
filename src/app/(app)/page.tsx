@@ -22,7 +22,8 @@ import useSWR from 'swr';
 import Link from 'next/link';
 import { useState } from 'react';
 import {
-    platform, iocs, pulses as pulsesApi,
+    platform, iocs, watch, actors as actorsApi, pulses as pulsesApi,
+    type ThreatActor,
 } from '@/lib/api';
 import {
     Bolt, ShieldAlert, Crosshair, Grid as GridIcon, Flame, Zap,
@@ -191,7 +192,7 @@ export default function CommandPage() {
 
             {/* ── Row 4: Watchlist + Latest pulses ─────────────────────── */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                <ActorWatchlistPanel actors={actors?.actors ?? []} />
+                <ActorWatchlistPanel activeActors={actors?.actors ?? []} />
                 <LatestPulsesPanel pulses={pulses?.items ?? []} />
             </div>
         </div>
@@ -327,21 +328,21 @@ function TriagePanel({ triage }: { triage: TriageIoc[] }) {
                                 >
                                     <Link
                                         href={`/iocs/${item.id}`}
-                                        // Flex row, NO `flex-1` on value/meta:
-                                        // the column sizes to its content
-                                        // (or truncates via min-w-0) and the
-                                        // sev pill + time sit IMMEDIATELY
-                                        // after at the design's 13px gap.
-                                        // Previously `flex-1` (and the `grid
-                                        // 1fr` before that) expanded the
-                                        // value/meta to consume the entire
-                                        // panel width, pushing the sev+time
-                                        // out to the far right edge where
-                                        // they visually orphaned against the
-                                        // adjacent Severity panel boundary.
-                                        // `max-w-md` caps very long values so
-                                        // the row doesn't sprawl edge-to-edge
-                                        // on wide screens.
+                                        // Flex row with sev pill tight to the
+                                        // value (gap-3 between them) and the
+                                        // timestamp pushed to the panel's
+                                        // right edge via `ml-auto`. This
+                                        // strikes the balance the design
+                                        // wants:
+                                        //   * sev pill reads as part of the
+                                        //     row's identity (next to value)
+                                        //   * timestamp lines up vertically
+                                        //     in a "time column" on the right
+                                        //   * empty space sits BETWEEN sev
+                                        //     and time, not after time,
+                                        //     killing the dead-space-on-the-
+                                        //     right feel of the previous
+                                        //     left-clustered layout.
                                         className="flex items-center gap-3 px-2 py-2 rounded hover:bg-bg-2 transition-colors"
                                     >
                                         <StatusDot status={dot} />
@@ -358,7 +359,7 @@ function TriagePanel({ triage }: { triage: TriageIoc[] }) {
                                             </div>
                                         </div>
                                         <Sev level={sev} short className="shrink-0" />
-                                        <span className="text-[11px] text-text-4 font-mono tnum shrink-0 w-8 text-right">
+                                        <span className="text-[11px] text-text-4 font-mono tnum shrink-0 w-8 text-right ml-auto">
                                             {relTime(item.lastSeen ?? item.firstSeen ?? item.createdAt ?? '')}
                                         </span>
                                     </Link>
@@ -627,14 +628,72 @@ function TrendingTagsPanel({
 
 type ActiveActor = Awaited<ReturnType<typeof platform.activeActors>>['actors'][number];
 
-function ActorWatchlistPanel({ actors }: { actors: ActiveActor[] }) {
-    const max = actors.reduce((m, a) => Math.max(m, a.score), 1);
+/**
+ * "Watchlist" semantics: show the user's pinned actors (via /v1/watch).
+ * If they haven't pinned any, fall back to the top active actors as a
+ * suggestion list with a hint that says "pin from any actor's drawer
+ * to populate this panel".
+ *
+ * Watched actors don't carry the `score`/`breakdown` shape — that's
+ * specific to /v1/actors/active. For the score bar we use `confidence`
+ * (0-100) as a stand-in; it's not the same signal but it's the best
+ * proxy on the ThreatActor row itself. Replace with a real "watched
+ * actor activity" backend field if/when one ships.
+ */
+function ActorWatchlistPanel({ activeActors }: { activeActors: ActiveActor[] }) {
+    // Pinned actor ids (cheap, no JOIN to threat_actors).
+    const { data: watchData } = useSWR(
+        'cc:watch:actors',
+        () => watch.list({ type: 'actor', limit: 6 }),
+        { revalidateOnFocus: false },
+    );
+    const watchedIds = watchData?.items.map(w => w.entityId) ?? [];
+
+    // Hydrate pinned actors by fetching each row. N+1 in theory but
+    // the watchlist is bounded (limit: 6) and the panel polls
+    // infrequently, so the cost is negligible. Promise.allSettled so
+    // a single deleted/merged actor doesn't fail the whole render.
+    const { data: hydratedWatched } = useSWR(
+        watchedIds.length > 0 ? ['cc:watch:actors:hydrated', watchedIds.join(',')] : null,
+        async () => {
+            const settled = await Promise.allSettled(
+                watchedIds.map(id => actorsApi.get(id)),
+            );
+            return settled
+                .filter((r): r is PromiseFulfilledResult<ThreatActor> => r.status === 'fulfilled')
+                .map(r => r.value);
+        },
+        { revalidateOnFocus: false },
+    );
+
+    const isWatchedMode = (hydratedWatched?.length ?? 0) > 0;
+    const list = isWatchedMode
+        ? hydratedWatched!.map(a => ({
+              id: a.id,
+              name: a.name,
+              primaryMotivation: a.primaryMotivation,
+              sophistication: a.sophistication,
+              // Confidence is a 0-100 proxy for "activity score" on
+              // watched actors — the activeActors composite score isn't
+              // available on ThreatActor rows.
+              score: a.confidence ?? 50,
+          }))
+        : activeActors;
+
+    const max = list.reduce((m, a) => Math.max(m, a.score), 1);
+
+    const subText = isWatchedMode
+        ? `${list.length} pinned`
+        : activeActors.length > 0
+            ? `${activeActors.length} active actors · nothing pinned yet`
+            : 'nothing pinned yet';
+
     return (
         <div className="panel panel-pad">
             <PanelHead
                 icon={<Bolt className="size-4" />}
                 title="Actor watchlist"
-                sub={`${actors.length} active actors`}
+                sub={subText}
                 right={
                     <Link href="/actors" className="text-[12px] text-text-3 hover:text-text inline-flex items-center gap-0.5">
                         All actors <ChevronRight className="size-3" />
@@ -642,9 +701,11 @@ function ActorWatchlistPanel({ actors }: { actors: ActiveActor[] }) {
                 }
             />
             <ul className="mt-3">
-                {actors.length === 0 ? (
-                    <li className="text-[12.5px] text-text-3">No active actors this window.</li>
-                ) : actors.map((a, i) => {
+                {list.length === 0 ? (
+                    <li className="text-[12.5px] text-text-3">
+                        No pinned actors yet — click <span className="text-text-2">Watch</span> on any actor&apos;s detail page to populate this panel.
+                    </li>
+                ) : list.map((a, i) => {
                     const hot = a.score > 70;
                     return (
                         <li
