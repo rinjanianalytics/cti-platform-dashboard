@@ -668,16 +668,32 @@ function ActorWatchlistPanel({ activeActors }: { activeActors: ActiveActor[] }) 
 
     const isWatchedMode = (hydratedWatched?.length ?? 0) > 0;
     const list = isWatchedMode
-        ? hydratedWatched!.map(a => ({
-              id: a.id,
-              name: a.name,
-              primaryMotivation: a.primaryMotivation,
-              sophistication: a.sophistication,
-              // Confidence is a 0-100 proxy for "activity score" on
-              // watched actors — the activeActors composite score isn't
-              // available on ThreatActor rows.
-              score: a.confidence ?? 50,
-          }))
+        ? hydratedWatched!.map(a => {
+              // `confidence` comes off a Postgres `numeric` column, which
+              // Drizzle serialises as a STRING by default (preserves
+              // precision but trips `.toFixed()` calls downstream). The
+              // TypeScript type says `number | null`; the runtime value
+              // doesn't. Coerce explicitly with NaN guards so a malformed
+              // value (empty string, null, etc.) falls back to 50 instead
+              // of rendering "NaN".
+              const raw = a.confidence;
+              const num = raw == null
+                  ? null
+                  : typeof raw === 'number'
+                      ? raw
+                      : Number(raw);
+              const score = num != null && Number.isFinite(num) ? num : 50;
+              return {
+                  id: a.id,
+                  name: a.name,
+                  primaryMotivation: a.primaryMotivation,
+                  sophistication: a.sophistication,
+                  // Confidence is a 0-100 proxy for "activity score" on
+                  // watched actors — the activeActors composite score
+                  // isn't available on ThreatActor rows.
+                  score,
+              };
+          })
         : activeActors;
 
     const max = list.reduce((m, a) => Math.max(m, a.score), 1);
