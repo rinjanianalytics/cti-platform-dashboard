@@ -9,69 +9,65 @@
  *   - toggleable via Tweaks.rail (persisted) AND via the topbar bell
  *   - header reads "What changed · last 2h" with a pulsing ok-dot
  *   - each row: severity-tinted square icon, title, meta, relative time
- *   - footer "Mark all reviewed"
  *
- * Per-event data source: `/v1/notifications` is the closest thing we
- * have today — it's the live activity stream that the bell already
- * counts unread for. The events stream the brief describes (KEV
- * additions, actor spikes, feed events) is Phase 3 backend work; until
- * it lands we surface notifications as the stand-in. The notification
- * shape maps cleanly: `type` → severity tint, `title` + `message` →
- * row content, `source` → meta.
+ * Data source: `/v1/events` — the semantic platform-event stream
+ * (cti-platform-api PR #19). KEV adds, high-CVSS CVEs, new actors,
+ * significant pulses, failed/partial syncs. Previously this rail was
+ * fed by `/v1/notifications` as a stand-in, which surfaced a wall of
+ * routine `Feed Sync — URLHAUS / 649 IOCs ingested` rows that drowned
+ * the actual changes.
+ *
+ * Notifications still own the topbar bell badge count (the per-user
+ * read/unread state) — those are different concepts and live in
+ * different surfaces.
  */
 
 import useSWR from 'swr';
-import Link from 'next/link';
-import { Zap, Database, ShieldAlert, Users, Info, X } from 'lucide-react';
-import { type LucideIcon } from 'lucide-react';
-import { notifications, type AppNotification } from '@/lib/api';
-import { relTime } from '@/lib/utils';
-import { cn } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
+import { Flame, ShieldAlert, Users, Rss, AlertTriangle, X, type LucideIcon } from 'lucide-react';
+import { events, type EventKind, type PlatformEvent } from '@/lib/api';
+import { relTime, cn } from '@/lib/utils';
 import { useTweaks } from './tweaks';
 import { StatusDot } from './status-dot';
 
 /**
- * Map a notification kind / source to a square icon + tint. The icon
- * lives inside a soft-tinted square — the design language is "category
- * at-a-glance" rather than "severity". Tints lean on sev-* tokens for
- * consistency but the semantics are domain (feed event vs actor event)
- * not "this is bad".
+ * Map an EventKind to a square icon + tint. The icon lives inside a
+ * soft-tinted square — design language is "category at-a-glance"
+ * rather than "this is bad". Tints lean on the sev-* tokens for
+ * consistency but the semantics are domain (KEV vs actor vs sync),
+ * not severity.
  */
-function kindFor(n: AppNotification): { icon: LucideIcon; tint: string; iconColor: string } {
-    const t = (n.type ?? '').toLowerCase();
-    const s = (n.source ?? '').toLowerCase();
-    // Errors and warnings ride a warmer tint.
-    if (t === 'error')   return { icon: ShieldAlert, tint: 'bg-sev-crit-soft', iconColor: 'text-sev-crit' };
-    if (t === 'warning') return { icon: ShieldAlert, tint: 'bg-sev-high-soft', iconColor: 'text-sev-high' };
-    if (t === 'success') return { icon: Zap,         tint: 'bg-sev-low-soft',  iconColor: 'text-sev-low'  };
-    // Otherwise classify by source — feed events / actor events read
-    // very differently and analysts skim by domain icon first.
-    if (s.includes('feed') || s.includes('pulse')) return { icon: Database,   tint: 'bg-sev-info-soft', iconColor: 'text-sev-info' };
-    if (s.includes('actor'))                       return { icon: Users,      tint: 'bg-sev-med-soft',  iconColor: 'text-sev-med'  };
-    if (s.includes('kev')   || s.includes('cve'))  return { icon: ShieldAlert, tint: 'bg-sev-high-soft', iconColor: 'text-sev-high' };
-    return { icon: Info, tint: 'bg-bg-2', iconColor: 'text-text-3' };
-}
+const KIND_DISPLAY: Record<EventKind, { icon: LucideIcon; tint: string; iconColor: string }> = {
+    // KEV — exploited in the wild, the "fire" metaphor reads instantly
+    kev:    { icon: Flame,          tint: 'bg-sev-crit-soft', iconColor: 'text-sev-crit' },
+    // CVE — vulnerability shield with a warning. Less alarming tone than KEV.
+    cve:    { icon: ShieldAlert,    tint: 'bg-sev-high-soft', iconColor: 'text-sev-high' },
+    // Actor — people. The med tint reads as "interesting, not urgent".
+    actor:  { icon: Users,          tint: 'bg-sev-med-soft',  iconColor: 'text-sev-med'  },
+    // Pulse — RSS feed glyph. Info tint because pulses are informational.
+    pulse:  { icon: Rss,            tint: 'bg-sev-info-soft', iconColor: 'text-sev-info' },
+    // Sync — operational urgency. High tint signals "operator should look".
+    sync:   { icon: AlertTriangle,  tint: 'bg-sev-high-soft', iconColor: 'text-sev-high' },
+};
 
 export function AttentionRail() {
     const tweaks = useTweaks();
+    const router = useRouter();
 
-    // Poll every 60s — that's the same cadence as the Command page's
-    // sparklines and well under the notification API's rate limit.
-    const { data, isLoading, mutate } = useSWR(
-        tweaks.rail ? 'attention-rail' : null,
-        () => notifications.list({ limit: 25 }),
+    // Poll every 60s — same cadence as the Command page's sparklines.
+    // /v1/events is unauthenticated and cheap (5 parallel COUNT-style
+    // queries on indexed timestamps), so the poll is fine to run from
+    // every browser tab without coordination.
+    const { data, isLoading } = useSWR(
+        tweaks.rail ? 'attention-rail:events' : null,
+        () => events.list({ limit: 25 }),
         { refreshInterval: 60_000 },
     );
 
     if (!tweaks.rail) return null;
 
-    const items = data ?? [];
-    const unread = items.filter(n => !n.read);
-
-    const markAllRead = async () => {
-        await notifications.markRead();
-        await mutate();
-    };
+    const items: PlatformEvent[] = data?.events ?? [];
+    const total = data?.total ?? items.length;
 
     return (
         <aside
@@ -91,11 +87,9 @@ export function AttentionRail() {
                         <div className="text-[10.5px] text-text-3 leading-tight">last 2h</div>
                     </div>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                    {unread.length > 0 && (
-                        <span className="text-[10.5px] font-mono tnum px-1.5 py-0.5 rounded bg-sev-high-soft text-sev-high">
-                            {unread.length}
-                        </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                    {total > 0 && (
+                        <span className="text-[11px] font-mono tnum text-text-3">{total}</span>
                     )}
                     <button
                         type="button"
@@ -117,32 +111,34 @@ export function AttentionRail() {
                     </div>
                 ) : items.length === 0 ? (
                     <div className="px-4 py-6 text-center text-[12px] text-text-3">
-                        Nothing new. The feed updates every minute.
+                        Nothing new in the last day. The feed updates every minute.
                     </div>
                 ) : (
                     <ul className="motion-enter">
-                        {items.map(n => {
-                            const { icon: Icon, tint, iconColor } = kindFor(n);
+                        {items.map(e => {
+                            const { icon: Icon, tint, iconColor } = KIND_DISPLAY[e.kind] ?? KIND_DISPLAY.pulse;
+                            const clickable = !!e.href;
                             return (
                                 <li
-                                    key={n.id}
+                                    key={e.id}
                                     className={cn(
-                                        'grid grid-cols-[28px_1fr_auto] gap-2.5 items-start px-4 py-2.5 border-b border-line-soft hover:bg-bg-2 transition-colors',
-                                        !n.read && 'bg-brand-soft/15',
+                                        'grid grid-cols-[28px_1fr_auto] gap-2.5 items-start px-4 py-2.5 border-b border-line-soft transition-colors',
+                                        clickable && 'hover:bg-bg-2 cursor-pointer',
                                     )}
+                                    onClick={clickable ? () => router.push(e.href!) : undefined}
+                                    role={clickable ? 'link' : undefined}
                                 >
                                     <span className={cn('flex items-center justify-center size-7 rounded shrink-0', tint)}>
                                         <Icon className={cn('size-3.5', iconColor)} />
                                     </span>
                                     <div className="min-w-0">
-                                        <div className="text-[12.5px] truncate font-medium">{n.title}</div>
-                                        {n.message && (
-                                            <div className="text-[11px] text-text-3 line-clamp-2">{n.message}</div>
+                                        <div className="text-[12.5px] font-medium leading-snug line-clamp-2">{e.title}</div>
+                                        {e.meta && (
+                                            <div className="text-[11px] text-text-3 line-clamp-2 mt-0.5">{e.meta}</div>
                                         )}
-                                        <div className="text-[10.5px] text-text-4 font-mono mt-0.5">{n.source}</div>
                                     </div>
                                     <span className="text-[10.5px] text-text-4 font-mono tnum shrink-0">
-                                        {relTime(n.createdAt)}
+                                        {relTime(e.timestamp)}
                                     </span>
                                 </li>
                             );
@@ -150,26 +146,6 @@ export function AttentionRail() {
                     </ul>
                 )}
             </div>
-
-            {/* Footer */}
-            <footer className="px-4 py-2.5 border-t border-line-soft shrink-0 flex items-center justify-between">
-                <button
-                    type="button"
-                    onClick={markAllRead}
-                    disabled={unread.length === 0}
-                    className={cn(
-                        'text-[11.5px] text-text-3 hover:text-text disabled:opacity-40 disabled:cursor-not-allowed transition-colors',
-                    )}
-                >
-                    Mark all reviewed
-                </button>
-                <Link
-                    href="/notifications"
-                    className="text-[11.5px] text-text-3 hover:text-text transition-colors"
-                >
-                    All notifications →
-                </Link>
-            </footer>
         </aside>
     );
 }

@@ -815,6 +815,11 @@ export const platform = {
                 recency: number;         // 0 or 2 (last_seen within 7d)
             };
         }>;
+        /** Count of actors with last_seen in the past 7 days. Distinct
+         *  from `actors.length` — the array is capped at `limit` (top by
+         *  score), while `total` is the real "active this week" count
+         *  used by the Threat Actors KPI tile's sub-line. */
+        total: number;
     }> {
         return request(`/v1/actors/active?limit=${limit}`);
     },
@@ -841,6 +846,40 @@ export const platform = {
         }>;
     }> {
         return request('/v1/monitoring/feeds');
+    },
+};
+
+/* ============================================================================
+   Platform events — semantic "what changed" stream for the attention rail.
+   Distinct from `notifications` (the per-user inbox). Read-only, polled
+   every 60s by the rail.
+   ========================================================================= */
+
+export type EventKind = 'kev' | 'cve' | 'actor' | 'pulse' | 'sync';
+
+export interface PlatformEvent {
+    id: string;
+    kind: EventKind;
+    title: string;
+    meta: string;
+    /** ISO timestamp — the rail sorts by this and renders relTime from it. */
+    timestamp: string;
+    /** Optional deep-link target so clicking the row jumps to the entity. */
+    href?: string;
+}
+
+export const events = {
+    async list(opts: { limit?: number } = {}): Promise<{
+        events: PlatformEvent[];
+        /** Total number of events surfaced across all kinds before the
+         *  request's `limit` was applied. Used by the rail's header
+         *  "N items" counter. */
+        total: number;
+    }> {
+        const qs = new URLSearchParams();
+        if (opts.limit) qs.set('limit', String(opts.limit));
+        const query = qs.toString();
+        return request(`/v1/events${query ? `?${query}` : ''}`);
     },
 };
 
