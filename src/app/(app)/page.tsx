@@ -46,12 +46,22 @@ const WINDOW_OPTIONS = [
     { value: '30D', label: '30D' },
 ] as const;
 
-const SEV_BAR_BG: Record<Severity, string> = {
-    crit: 'bg-sev-crit',
-    high: 'bg-sev-high',
-    med:  'bg-sev-med',
-    low:  'bg-sev-low',
-    info: 'bg-sev-info',
+/**
+ * Direct CSS variable refs for the severity bars, used in place of the
+ * `bg-sev-*` Tailwind utilities. Reason: the panel's track colour
+ * (`--bg-3`) is only defined inside `.dark`, and Tailwind 4's
+ * `@theme inline` aliasing of `--color-bg-3: var(--bg-3)` can land an
+ * empty utility when the alias is evaluated outside the `.dark`
+ * cascade. The fills then render invisibly. Inline CSS-var refs
+ * resolve at runtime via the document cascade so the colours always
+ * land regardless of build-time tokenisation.
+ */
+const SEV_BAR_VAR: Record<Severity, string> = {
+    crit: 'var(--sev-crit)',
+    high: 'var(--sev-high)',
+    med:  'var(--sev-med)',
+    low:  'var(--sev-low)',
+    info: 'var(--sev-info)',
 };
 
 export default function CommandPage() {
@@ -296,28 +306,36 @@ function TriagePanel({ triage }: { triage: TriageIoc[] }) {
                     </div>
                 ) : (
                     <ul>
-                        {triage.map(item => {
+                        {triage.map((item, i) => {
                             const sev = normalizeSeverity(item.severity);
                             const dot = sev === 'crit' ? 'down' : sev === 'high' ? 'warn' : 'idle';
                             return (
-                                <li key={item.id} className="triage-row group">
+                                <li
+                                    key={item.id}
+                                    className="triage-row group"
+                                    style={i > 0 ? { borderTop: '1px solid var(--line-soft)' } : undefined}
+                                >
                                     <Link
                                         href={`/iocs/${item.id}`}
-                                        // Flex layout per the design's prototype
-                                        // (display:flex, gap:13). The previous
-                                        // grid [16px_1fr_auto_auto] pushed the
-                                        // sev pill + time to the panel's far
-                                        // right edge — when the value text is
-                                        // short (typical for a single-word
-                                        // domain), the visual reads as the
-                                        // sev/time being orphaned from the row.
-                                        // `flex-1 min-w-0` still lets long
-                                        // values truncate, but short values
-                                        // keep the sev+time tight against them.
+                                        // Flex row, NO `flex-1` on value/meta:
+                                        // the column sizes to its content
+                                        // (or truncates via min-w-0) and the
+                                        // sev pill + time sit IMMEDIATELY
+                                        // after at the design's 13px gap.
+                                        // Previously `flex-1` (and the `grid
+                                        // 1fr` before that) expanded the
+                                        // value/meta to consume the entire
+                                        // panel width, pushing the sev+time
+                                        // out to the far right edge where
+                                        // they visually orphaned against the
+                                        // adjacent Severity panel boundary.
+                                        // `max-w-md` caps very long values so
+                                        // the row doesn't sprawl edge-to-edge
+                                        // on wide screens.
                                         className="flex items-center gap-3 px-2 py-2 rounded hover:bg-bg-2 transition-colors"
                                     >
                                         <StatusDot status={dot} />
-                                        <div className="flex-1 min-w-0">
+                                        <div className="min-w-0 max-w-md">
                                             <div className="font-mono text-[13px] truncate">{item.value}</div>
                                             <div className="text-[11px] text-text-3 flex items-center gap-2 mt-0.5">
                                                 <span className="uppercase tracking-wider">{item.type}</span>
@@ -365,20 +383,27 @@ function SeverityPanel({ landscape }: { landscape: Awaited<ReturnType<typeof pla
                 title="Severity distribution"
                 sub={`${fmt(total)} active indicators`}
             />
-            {/* Stacked spectrum — 8px tall per spec, sits above the rows with
-                an 18px gap. Explicit inline style fallback for the height
-                in case Tailwind's `mb-4.5` arbitrary value doesn't resolve
-                in some build configurations — the spec is unambiguous. */}
+            {/* Stacked spectrum — 8px tall per spec. Track + segment colours
+                use inline `var(--bg-3)` / `var(--sev-*)` rather than
+                Tailwind utilities because `--bg-3` is only defined in
+                `.dark` and Tailwind 4's `@theme inline` resolution of
+                cascade-defined variables can leave the utility empty.
+                Inline refs resolve through the document cascade
+                guaranteeing the bar lands. Height bumped to 10px so the
+                spectrum reads as a bar rather than a hairline on this
+                narrow column. */}
             {total > 0 && (
                 <div
-                    className="mt-3 flex h-2 w-full overflow-hidden rounded-[5px] bg-bg-3"
-                    style={{ marginBottom: 18 }}
+                    className="mt-3 flex w-full overflow-hidden rounded-[5px]"
+                    style={{ marginBottom: 18, height: 10, background: 'var(--bg-3)' }}
                 >
                     {buckets.map(b => (
                         <div
                             key={b.sev}
-                            className={SEV_BAR_BG[b.sev]}
-                            style={{ width: `${(b.count / total) * 100}%` }}
+                            style={{
+                                width: `${(b.count / total) * 100}%`,
+                                background: SEV_BAR_VAR[b.sev],
+                            }}
                             title={`${b.sev}: ${b.count}`}
                         />
                     ))}
@@ -399,10 +424,16 @@ function SeverityPanel({ landscape }: { landscape: Awaited<ReturnType<typeof pla
                 ) : buckets.map(b => (
                     <li key={b.sev} className="grid grid-cols-[74px_1fr_auto] items-center gap-3">
                         <Sev level={b.sev} className="inline-flex justify-center w-full" />
-                        <div className="h-2 bg-bg-3 rounded">
+                        <div
+                            className="rounded"
+                            style={{ height: 10, background: 'var(--bg-3)' }}
+                        >
                             <div
-                                className={cn('h-full rounded', SEV_BAR_BG[b.sev])}
-                                style={{ width: `${Math.max((b.count / max) * 100, 4)}%` }}
+                                className="h-full rounded"
+                                style={{
+                                    width: `${Math.max((b.count / max) * 100, 4)}%`,
+                                    background: SEV_BAR_VAR[b.sev],
+                                }}
                             />
                         </div>
                         <span className="font-mono text-[12.5px] tnum text-text w-14 text-right">
@@ -445,7 +476,10 @@ function IndicatorTypesPanel({
                     return (
                         <li key={t.type} className="grid grid-cols-[96px_1fr_auto] items-center gap-2.5">
                             <span className="font-mono text-[11px] uppercase tracking-wider text-text-2 truncate">{t.type}</span>
-                            <div className="h-2 bg-bg-3 rounded">
+                            <div
+                                className="rounded"
+                                style={{ height: 8, background: 'var(--bg-3)' }}
+                            >
                                 <div
                                     className="h-full rounded"
                                     style={{
@@ -620,10 +654,16 @@ function ActorWatchlistPanel({ actors }: { actors: ActiveActor[] }) {
                                         {[a.primaryMotivation, a.sophistication].filter(Boolean).join(' · ') || '—'}
                                     </div>
                                 </div>
-                                <div className="h-1.25 bg-bg-3 rounded-sm w-13">
+                                <div
+                                    className="rounded-sm w-13"
+                                    style={{ height: 5, background: 'var(--bg-3)' }}
+                                >
                                     <div
-                                        className={cn('h-full rounded-sm', hot ? 'bg-sev-high' : 'bg-brand')}
-                                        style={{ width: `${(a.score / max) * 100}%` }}
+                                        className="h-full rounded-sm"
+                                        style={{
+                                            width: `${(a.score / max) * 100}%`,
+                                            background: hot ? 'var(--sev-high)' : 'var(--brand)',
+                                        }}
                                     />
                                 </div>
                                 <span className="font-mono text-[12px] tnum text-text-2 text-right">
