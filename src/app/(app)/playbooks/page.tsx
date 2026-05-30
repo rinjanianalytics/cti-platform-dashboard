@@ -47,11 +47,11 @@ export default function PlaybooksPage() {
     const items = data?.items ?? [];
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             <div className="flex items-end justify-between gap-4 flex-wrap">
                 <div>
-                    <h1 className="text-3xl font-semibold tracking-tight">Playbooks</h1>
-                    <p className="text-sm text-muted-foreground mt-1 tabular-nums">
+                    <h1 className="h-page">Playbooks</h1>
+                    <p className="sub tabular-nums mt-1">
                         {isLoading ? 'Loading…' : `${items.length} automation rule${items.length === 1 ? '' : 's'}`}
                     </p>
                 </div>

@@ -29,11 +29,11 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { LogOut, Search, UserCircle2 } from 'lucide-react';
-import { NotificationBell } from '@/components/notification-bell';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 import { UTCClock } from './utc-clock';
 import { TweaksPanel } from './tweaks-panel';
+import { RailToggle } from './rail-toggle';
 
 export function Topbar() {
     const { user, logout } = useAuth();
@@ -56,7 +56,7 @@ export function Topbar() {
                 <UTCClock />
                 <span className="h-5 w-px bg-line-soft mx-0.5 hidden sm:block" />
                 <TweaksPanel />
-                <NotificationBell />
+                <RailToggle />
                 <DropdownMenu>
                     <DropdownMenuTrigger
                         className={cn(

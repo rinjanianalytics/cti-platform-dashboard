@@ -23,17 +23,20 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Search, X, Users, MoreVertical, ShieldOff, ShieldCheck, UserCog, Flame } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, relTime } from '@/lib/utils';
-import { PageHeader } from '@/components/admin/page-header';
-import { StatusBadge } from '@/lib/tone';
+import { StatusDot } from '@/components/cc/status-dot';
 
 const PAGE_SIZE = 25;
 
+// Roles map to Command Center palette: admin = sev-crit (highest blast
+// radius), analyst = brand (the default productive role), auditor =
+// sev-info (read-priviliged), developer = sev-high (special), viewer =
+// muted bg-2.
 const ROLE_TONE: Record<string, string> = {
-    admin:     'bg-red-500/15 text-red-400 border-red-500/30',
-    analyst:   'bg-blue-500/15 text-blue-400 border-blue-500/30',
-    developer: 'bg-fuchsia-500/15 text-fuchsia-400 border-fuchsia-500/30',
-    auditor:   'bg-amber-500/15 text-amber-400 border-amber-500/30',
-    viewer:    'bg-slate-500/15 text-slate-400 border-slate-500/30',
+    admin:     'bg-sev-crit-soft text-sev-crit border-[color:var(--sev-crit)]',
+    analyst:   'bg-brand-soft text-brand border-brand-line',
+    developer: 'bg-sev-high-soft text-sev-high border-[color:var(--sev-high)]',
+    auditor:   'bg-sev-info-soft text-sev-info border-[color:var(--sev-info)]',
+    viewer:    'bg-bg-2 text-text-3 border-line-soft',
 };
 
 export default function AdminUsersPage() {
@@ -112,9 +115,12 @@ export default function AdminUsersPage() {
             width: 'w-24',
             accessor: u => u.isActive ? 1 : 0,
             sortable: true,
-            cell: u => u.isActive
-                ? <StatusBadge kind="success">Active</StatusBadge>
-                : <StatusBadge kind="idle">Disabled</StatusBadge>,
+            cell: u => (
+                <span className="inline-flex items-center gap-1.5 text-[11.5px] text-text-2">
+                    <StatusDot status={u.isActive ? 'ok' : 'idle'} />
+                    {u.isActive ? 'Active' : 'Disabled'}
+                </span>
+            ),
         },
         {
             id: 'lastLogin',
@@ -136,11 +142,15 @@ export default function AdminUsersPage() {
     ];
 
     return (
-        <div className="space-y-6">
-            <PageHeader
-                title="Users"
-                description={isLoading ? 'Loading…' : `${total.toLocaleString()} user${total === 1 ? '' : 's'}`}
-            />
+        <div className="space-y-4">
+            <div className="flex items-end justify-between gap-4 flex-wrap">
+                <div>
+                    <h1 className="h-page">Users</h1>
+                    <p className="sub tabular-nums mt-1">
+                        {isLoading ? 'Loading…' : `${total.toLocaleString()} user${total === 1 ? '' : 's'}`}
+                    </p>
+                </div>
+            </div>
 
             <div className="flex items-center gap-2 flex-wrap">
                 <div className="relative flex-1 min-w-60 max-w-md">
