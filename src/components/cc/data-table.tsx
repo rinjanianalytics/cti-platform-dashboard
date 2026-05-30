@@ -286,7 +286,10 @@ export function CcDataTable<T>({
                     <thead>
                         <tr>
                             {selection && (
-                                <th className="pl-3 py-2 text-left sticky top-0 z-10 bg-bg-2 border-b border-line-soft">
+                                <th
+                                    style={{ width: '2.5rem' }}
+                                    className="pl-3 py-2 text-left sticky top-0 z-10 bg-bg-2 border-b border-line-soft"
+                                >
                                     <input
                                         type="checkbox"
                                         checked={allOnPageSelected}
@@ -299,9 +302,15 @@ export function CcDataTable<T>({
                             )}
                             {columns.map(col => {
                                 const sortedByMe = sort?.id === col.id;
+                                // Apply width inline on the <th> too — `table-fixed`
+                                // resolves column widths from the FIRST ROW when a
+                                // <col> width doesn't take effect (e.g. some
+                                // Tailwind/Turbopack pipelines). Belt and braces.
+                                const widthStyle = colWidthStyle(col.width);
                                 return (
                                     <th
                                         key={col.id}
+                                        style={widthStyle}
                                         className={cn(
                                             'px-3 py-2 text-left font-medium text-[11px] text-text-3',
                                             'sticky top-0 z-10 bg-bg-2 border-b border-line-soft',
