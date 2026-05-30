@@ -9,31 +9,27 @@ import {
 } from '@/lib/api';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { Search, Sparkles, Loader2 } from 'lucide-react';
+import {
+    Search, Sparkles, Loader2,
+    LayoutDashboard, Database, Radar, Shield, Users, Network, ServerCog, BookOpen,
+    Workflow, CalendarClock, UsersRound, ScrollText, Bell, RefreshCcw, Sliders,
+    type LucideIcon,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /**
  * Per-entity display attributes, keyed by the **canonical** (underscore)
  * entityType — apply `normalizeEntityType()` to `hit.entityType` before
  * indexing into this map.
- *
- * `dotBg` is the Tailwind class for the leading 1.5px status dot — kept
- * separate from text colour so the row stays readable without colouring
- * the body text.
  */
 const ENTITY_DISPLAY: Record<string, { label: string; dotBg: string }> = {
-    ioc:           { label: 'Indicators',    dotBg: 'bg-sky-400'     },
-    vulnerability: { label: 'Vulnerabilities', dotBg: 'bg-rose-400'  },
-    threat_actor:  { label: 'Threat actors', dotBg: 'bg-amber-400'   },
-    pulse:         { label: 'Pulses',        dotBg: 'bg-emerald-400' },
+    ioc:           { label: 'Indicators',      dotBg: 'bg-sky-400'     },
+    vulnerability: { label: 'Vulnerabilities', dotBg: 'bg-rose-400'    },
+    threat_actor:  { label: 'Threat actors',   dotBg: 'bg-amber-400'   },
+    pulse:         { label: 'Pulses',          dotBg: 'bg-emerald-400' },
 };
 
-/**
- * Filter chips shown above the input. `wire` is the value sent to the
- * backend's `?type=` filter — matches the indexed `entityType` (note: the
- * backend uses a hyphen for `threat-actor` even though we use underscore
- * canonically; `searchTypeWire()` in api.ts handles this on outbound).
- */
+/** Type filter chips above the input — scopes the backend query. */
 const TYPE_FILTERS = [
     { key: 'all',           label: 'All',     wire: undefined          },
     { key: 'ioc',           label: 'IOCs',    wire: 'ioc'              },
@@ -43,13 +39,72 @@ const TYPE_FILTERS = [
 
 type FilterKey = (typeof TYPE_FILTERS)[number]['key'];
 
-/**
- * Section order in the results pane — actors first because when the user
- * types something like "lazarus" or "apt29" they almost certainly want the
- * actor rather than the 200 IOCs attached to it. CVEs next because the
- * query shape (e.g. "CVE-2024-") is unambiguous. IOCs last and densest.
- */
+/** Section order in the entity results pane (actors first — see `lazarus`-style queries). */
 const SECTION_ORDER: string[] = ['threat_actor', 'vulnerability', 'ioc', 'pulse'];
+
+/**
+ * Jump-to-screen navigation results. Mirrors the sidebar's nav groups so
+ * "audit" / "schedule" / "feed" / etc. all surface their screen at the top
+ * of the palette before any entity matches load. Empty query = top 5 shown
+ * unfiltered.
+ */
+interface NavRowItem {
+    href: string;
+    label: string;
+    group: string;        // sidebar group eyebrow ("Monitor", "Investigate", …)
+    icon: LucideIcon;
+    /** Keywords for fuzzy matching (e.g. "ioc" matches Indicators). */
+    keywords?: string[];
+}
+
+const NAV_ITEMS: NavRowItem[] = [
+    { href: '/',                    label: 'Command',        group: 'Monitor',     icon: LayoutDashboard, keywords: ['overview', 'dashboard', 'triage', 'home'] },
+    { href: '/feeds',               label: 'Feeds',          group: 'Monitor',     icon: Database },
+    { href: '/iocs',                label: 'Indicators',     group: 'Investigate', icon: Radar,      keywords: ['ioc', 'iocs'] },
+    { href: '/vulnerabilities',     label: 'Vulnerabilities',group: 'Investigate', icon: Shield,     keywords: ['cve', 'cves', 'vuln', 'kev'] },
+    { href: '/actors',              label: 'Threat actors',  group: 'Investigate', icon: Users,      keywords: ['actor', 'apt', 'group'] },
+    { href: '/graph',               label: 'Graph',          group: 'Investigate', icon: Network,    keywords: ['neo4j', 'explore', 'pivot'] },
+    { href: '/admin/services',      label: 'Services',       group: 'Operate',     icon: ServerCog,  keywords: ['health', 'queues', 'workers'] },
+    { href: '/admin/runbook',       label: 'Runbook',        group: 'Operate',     icon: BookOpen },
+    { href: '/playbooks',           label: 'Playbooks',      group: 'Operate',     icon: Workflow,   keywords: ['automation'] },
+    { href: '/admin/feeds',         label: 'Feed config',    group: 'Admin',       icon: Database },
+    { href: '/admin/schedules',     label: 'Schedules',      group: 'Admin',       icon: CalendarClock, keywords: ['cron'] },
+    { href: '/admin/users',         label: 'Users',          group: 'Admin',       icon: UsersRound },
+    { href: '/admin/audit',         label: 'Audit log',      group: 'Admin',       icon: ScrollText, keywords: ['audit', 'log'] },
+];
+
+/** Quick actions — dispatch a custom event or open a panel; never persist data. */
+interface ActionRowItem {
+    id: string;
+    label: string;
+    icon: LucideIcon;
+    keywords?: string[];
+    run: (ctx: { router: ReturnType<typeof useRouter> }) => void;
+}
+
+const ACTIONS: ActionRowItem[] = [
+    {
+        id: 'refresh-feeds',
+        label: 'Refresh feeds',
+        icon: RefreshCcw,
+        keywords: ['sync', 'pull', 'reload'],
+        run: () => window.dispatchEvent(new CustomEvent('rinjani:refresh-feeds')),
+    },
+    {
+        id: 'open-notifications',
+        label: 'Open notifications',
+        icon: Bell,
+        keywords: ['alerts', 'inbox'],
+        run: ({ router }) => router.push('/notifications'),
+    },
+    {
+        id: 'open-tweaks',
+        label: 'Open tweaks (accent + density)',
+        icon: Sliders,
+        keywords: ['theme', 'compact', 'comfort', 'colour', 'color'],
+        run: () => window.dispatchEvent(new CustomEvent('rinjani:open-tweaks')),
+    },
+];
 
 export function SearchPalette() {
     const [open, setOpen] = useState(false);
@@ -72,8 +127,7 @@ export function SearchPalette() {
         return () => window.removeEventListener('keydown', handler);
     }, []);
 
-    // Pre-fill from the hero pill (or any caller dispatching this event).
-    // Payload: { q?: string, mode?: 'text' | 'semantic' }.
+    // External open events (hero pill, command actions, etc.)
     useEffect(() => {
         const handler = (e: Event) => {
             const detail = (e as CustomEvent<{ q?: string; mode?: 'text' | 'semantic' }>).detail;
@@ -85,10 +139,8 @@ export function SearchPalette() {
         return () => window.removeEventListener('rinjani:open-search', handler);
     }, []);
 
-    // Reset focus when the user changes the query shape, search mode, or
-    // type filter — we do this in the change handlers (not in an effect)
-    // because setState-in-effect cascades into an extra render, and the
-    // lint rule `react-hooks/set-state-in-effect` rightly flags it.
+    // Reset focus when shape of results changes — done in event handlers,
+    // not in an effect, to avoid the react-hooks/set-state-in-effect lint.
     const onQueryChange = (next: string) => {
         if (next !== q) setFocused(0);
         setQ(next);
@@ -102,22 +154,19 @@ export function SearchPalette() {
         setTypeFilter(key);
     };
 
-    // Focus the input when opening — slight delay so the dialog's mount
-    // animation doesn't steal focus back.
     useEffect(() => {
         if (open) setTimeout(() => inputRef.current?.focus(), 50);
     }, [open]);
 
     const trimmed = q.trim();
+    const qLower = trimmed.toLowerCase();
     const enabled = trimmed.length >= 2;
     const wireType = TYPE_FILTERS.find(f => f.key === typeFilter)?.wire;
 
+    // Entity search — only fires when query is ≥2 chars.
     const { data, isLoading } = useSWR(
         enabled ? ['palette', mode, trimmed, wireType ?? 'all'] : null,
         async () => {
-            // Time the round-trip client-side so we can show a "Xms" hint
-            // in the footer (GreyNoise-style) regardless of which backend
-            // path served the query.
             const t0 = performance.now();
             const items = mode === 'semantic'
                 ? (await search.vector({ q: trimmed, k: 12, type: wireType })).items
@@ -127,15 +176,29 @@ export function SearchPalette() {
         { dedupingInterval: 300, keepPreviousData: true },
     );
 
-    // Stabilize the items reference so downstream useMemo deps don't churn
-    // every render when SWR returns the same data with a fresh array literal.
-    const items: SearchHit[] = useMemo(() => data?.items ?? [], [data?.items]);
+    const entityItems: SearchHit[] = useMemo(() => data?.items ?? [], [data?.items]);
 
-    // Bucket hits by normalized entityType so we can render section headers,
-    // then flatten in section order for keyboard navigation.
-    const grouped = useMemo(() => {
+    // Nav + Actions matching — substring on label + keywords.
+    const navMatches = useMemo(() => {
+        if (qLower === '') return NAV_ITEMS.slice(0, 5);  // empty: top 5 as a quick-jump default
+        return NAV_ITEMS.filter(n =>
+            n.label.toLowerCase().includes(qLower)
+            || (n.keywords ?? []).some(k => k.includes(qLower)),
+        ).slice(0, 6);
+    }, [qLower]);
+
+    const actionMatches = useMemo(() => {
+        if (qLower === '') return [];   // hide actions until user types — keeps the empty state clean
+        return ACTIONS.filter(a =>
+            a.label.toLowerCase().includes(qLower)
+            || (a.keywords ?? []).some(k => k.includes(qLower)),
+        );
+    }, [qLower]);
+
+    // Entity results bucketed by normalized entityType.
+    const entityGrouped = useMemo(() => {
         const buckets: Record<string, SearchHit[]> = {};
-        for (const hit of items) {
+        for (const hit of entityItems) {
             const k = normalizeEntityType(hit.entityType);
             (buckets[k] ??= []).push(hit);
         }
@@ -143,48 +206,65 @@ export function SearchPalette() {
         for (const key of SECTION_ORDER) {
             if (buckets[key]?.length) ordered.push({ key, hits: buckets[key] });
         }
-        // Anything we didn't anticipate (future entity types) lands at the
-        // bottom rather than getting silently dropped.
         for (const [key, hits] of Object.entries(buckets)) {
             if (!SECTION_ORDER.includes(key)) ordered.push({ key, hits });
         }
         return ordered;
-    }, [items]);
+    }, [entityItems]);
 
-    // Pre-compute global flat index per hit so render stays declarative.
-    const sections = useMemo(() => {
-        let i = 0;
-        return grouped.map(({ key, hits }) => ({
-            key,
-            hits: hits.map(hit => ({ hit, idx: i++ })),
-        }));
-    }, [grouped]);
+    // Discriminated union representing one render row in the palette.
+    type Row =
+        | { kind: 'nav';    item: NavRowItem }
+        | { kind: 'entity'; hit: SearchHit; entityKey: string }
+        | { kind: 'action'; item: ActionRowItem };
 
-    const flat = useMemo(() => grouped.flatMap(g => g.hits), [grouped]);
+    // Flat row array (used for keyboard nav). Order: Navigation → Entities → Actions.
+    const flatRows: Row[] = useMemo(() => {
+        const rows: Row[] = [];
+        for (const item of navMatches) rows.push({ kind: 'nav', item });
+        for (const sec of entityGrouped) {
+            for (const hit of sec.hits) rows.push({ kind: 'entity', hit, entityKey: sec.key });
+        }
+        for (const item of actionMatches) rows.push({ kind: 'action', item });
+        return rows;
+    }, [navMatches, entityGrouped, actionMatches]);
 
-    const select = (hit: SearchHit) => {
+    // Look up the global flat index per row so render stays declarative.
+    const rowIndices = useMemo(() => {
+        const map = new Map<Row, number>();
+        flatRows.forEach((r, i) => map.set(r, i));
+        return map;
+    }, [flatRows]);
+
+    const runRow = (row: Row) => {
         setOpen(false);
         setQ('');
-        router.push(hitHref(hit));
+        if (row.kind === 'nav')    router.push(row.item.href);
+        if (row.kind === 'entity') router.push(hitHref(row.hit));
+        if (row.kind === 'action') row.item.run({ router });
     };
 
     const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'ArrowDown') {
             e.preventDefault();
-            setFocused(f => Math.min(flat.length - 1, f + 1));
+            setFocused(f => Math.min(flatRows.length - 1, f + 1));
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             setFocused(f => Math.max(0, f - 1));
         } else if (e.key === 'Enter') {
-            if (flat[focused]) {
+            if (flatRows[focused]) {
                 e.preventDefault();
-                select(flat[focused]);
+                runRow(flatRows[focused]);
             }
         } else if (e.key === 'Tab') {
             e.preventDefault();
             onModeToggle();
         }
     };
+
+    const showEntityLoading = enabled && isLoading && entityItems.length === 0;
+    const showEntityEmpty = enabled && !isLoading && entityItems.length === 0;
+    const totalRows = flatRows.length;
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
@@ -204,7 +284,7 @@ export function SearchPalette() {
                         onKeyDown={onKeyDown}
                         placeholder={mode === 'semantic'
                             ? 'Describe a threat in natural language…'
-                            : 'Search IOCs, CVEs, actors — try "lazarus", "CVE-2024-", or an IP'}
+                            : 'Search anything — screens, IOCs, CVEs, actors, actions'}
                         className="border-0 shadow-none focus-visible:ring-0 px-0 h-9"
                     />
                     <button
@@ -237,89 +317,125 @@ export function SearchPalette() {
 
                 {/* Results */}
                 <div className="max-h-105 overflow-y-auto">
-                    {!enabled ? (
-                        <div className="px-4 py-6 text-center space-y-2">
-                            <p className="text-xs text-muted-foreground">
-                                Type at least two characters to search.
-                            </p>
-                            <p className="text-[11px] text-muted-foreground">
-                                Try <span className="font-mono text-foreground">lazarus</span>,{' '}
-                                <span className="font-mono text-foreground">CVE-2024-</span>,{' '}
-                                or an IP. Press <kbd className="font-mono">Tab</kbd> for semantic mode.
-                            </p>
-                        </div>
-                    ) : isLoading && items.length === 0 ? (
+                    {/* Navigation — always when there are matches OR when query is empty */}
+                    {navMatches.length > 0 && (
+                        <PaletteSection title="Navigation" count={navMatches.length}>
+                            {navMatches.map(item => {
+                                const row: Row = { kind: 'nav', item };
+                                const idx = rowIndices.get(row) ?? 0;
+                                const Icon = item.icon;
+                                return (
+                                    <PaletteRowButton
+                                        key={`nav:${item.href}`}
+                                        focused={idx === focused}
+                                        onClick={() => runRow(row)}
+                                        onMouseEnter={() => setFocused(idx)}
+                                    >
+                                        <Icon className="size-3.5 text-muted-foreground shrink-0" />
+                                        <span className="text-sm flex-1 truncate">{item.label}</span>
+                                        <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground shrink-0">
+                                            {item.group}
+                                        </span>
+                                    </PaletteRowButton>
+                                );
+                            })}
+                        </PaletteSection>
+                    )}
+
+                    {/* Entity results (only with ≥2 chars) */}
+                    {showEntityLoading && (
                         <div className="px-4 py-6 text-center text-xs text-muted-foreground">
                             <Loader2 className="size-4 mx-auto animate-spin mb-2" />
                             Searching…
                         </div>
-                    ) : items.length === 0 ? (
+                    )}
+                    {entityGrouped.map(({ key, hits }) => {
+                        const display = ENTITY_DISPLAY[key] ?? { label: key, dotBg: 'bg-muted-foreground' };
+                        return (
+                            <PaletteSection
+                                key={key}
+                                title={display.label}
+                                count={hits.length}
+                                dot={display.dotBg}
+                            >
+                                {hits.map(hit => {
+                                    const row: Row = { kind: 'entity', hit, entityKey: key };
+                                    const idx = rowIndices.get(row) ?? 0;
+                                    return (
+                                        <PaletteRowButton
+                                            key={`ent:${hit.entityType}:${hit.id}`}
+                                            focused={idx === focused}
+                                            onClick={() => runRow(row)}
+                                            onMouseEnter={() => setFocused(idx)}
+                                            indented
+                                        >
+                                            <div className="min-w-0 flex-1">
+                                                <div className="text-sm truncate font-mono">{hitLabel(hit)}</div>
+                                                {hit.description && (
+                                                    <div className="text-[11px] text-muted-foreground truncate">
+                                                        {hit.description}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                {hit.type && key === 'ioc' && (
+                                                    <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{hit.type}</span>
+                                                )}
+                                                {hit.severity && (
+                                                    <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{hit.severity}</span>
+                                                )}
+                                                {hit._score != null && (
+                                                    <span className="text-[10px] font-mono tabular-nums text-muted-foreground">{hit._score.toFixed(2)}</span>
+                                                )}
+                                            </div>
+                                        </PaletteRowButton>
+                                    );
+                                })}
+                            </PaletteSection>
+                        );
+                    })}
+
+                    {/* Actions — only when typing */}
+                    {actionMatches.length > 0 && (
+                        <PaletteSection title="Actions" count={actionMatches.length}>
+                            {actionMatches.map(item => {
+                                const row: Row = { kind: 'action', item };
+                                const idx = rowIndices.get(row) ?? 0;
+                                const Icon = item.icon;
+                                return (
+                                    <PaletteRowButton
+                                        key={`act:${item.id}`}
+                                        focused={idx === focused}
+                                        onClick={() => runRow(row)}
+                                        onMouseEnter={() => setFocused(idx)}
+                                    >
+                                        <Icon className="size-3.5 text-muted-foreground shrink-0" />
+                                        <span className="text-sm flex-1 truncate">{item.label}</span>
+                                    </PaletteRowButton>
+                                );
+                            })}
+                        </PaletteSection>
+                    )}
+
+                    {/* Empty state — only when query has no matches anywhere */}
+                    {totalRows === 0 && enabled && !isLoading && (
                         <p className="text-xs text-muted-foreground px-4 py-6 text-center">
                             No matches. Try a different phrase, change the filter, or toggle search mode.
                         </p>
-                    ) : (
-                        <div>
-                            {sections.map(({ key, hits }) => {
-                                const display = ENTITY_DISPLAY[key] ?? { label: key, dotBg: 'bg-muted-foreground' };
-                                return (
-                                    <section key={key}>
-                                        <header className="px-3 pt-2 pb-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                                            <span className={cn('inline-block size-1 rounded-full', display.dotBg)} />
-                                            <span>{display.label}</span>
-                                            <span className="opacity-50 tabular-nums">· {hits.length}</span>
-                                        </header>
-                                        <ul>
-                                            {hits.map(({ hit, idx }) => {
-                                                const isFocused = idx === focused;
-                                                return (
-                                                    <li key={`${hit.entityType}:${hit.id}`}>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => select(hit)}
-                                                            onMouseEnter={() => setFocused(idx)}
-                                                            className={cn(
-                                                                'w-full grid grid-cols-[1fr_auto] gap-3 items-center text-left px-3 py-2 pl-6',
-                                                                isFocused ? 'bg-accent' : 'hover:bg-accent/50',
-                                                            )}
-                                                        >
-                                                            <div className="min-w-0">
-                                                                <div className="text-sm truncate font-mono">{hitLabel(hit)}</div>
-                                                                {hit.description && (
-                                                                    <div className="text-[11px] text-muted-foreground truncate">
-                                                                        {hit.description}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                            <div className="flex items-center gap-2 shrink-0">
-                                                                {hit.type && key === 'ioc' && (
-                                                                    <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-                                                                        {hit.type}
-                                                                    </span>
-                                                                )}
-                                                                {hit.severity && (
-                                                                    <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-                                                                        {hit.severity}
-                                                                    </span>
-                                                                )}
-                                                                {hit._score != null && (
-                                                                    <span className="text-[10px] font-mono tabular-nums text-muted-foreground">
-                                                                        {hit._score.toFixed(2)}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </button>
-                                                    </li>
-                                                );
-                                            })}
-                                        </ul>
-                                    </section>
-                                );
-                            })}
-                        </div>
+                    )}
+                    {totalRows === 0 && !enabled && (
+                        <p className="text-xs text-muted-foreground px-4 py-6 text-center">
+                            Start typing — or use ↑↓ to jump to a screen above.
+                        </p>
+                    )}
+                    {showEntityEmpty && totalRows > 0 && (
+                        <p className="text-[11px] text-muted-foreground px-4 py-2 text-center">
+                            No entity matches. Adjust the filter or try semantic mode (Tab).
+                        </p>
                     )}
                 </div>
 
-                {/* Footer — keyboard hints on the left, query stats + close on the right */}
+                {/* Footer */}
                 <div className="px-3 py-2 border-t flex items-center justify-between text-[10px] text-muted-foreground gap-3 flex-wrap">
                     <div className="flex gap-3 shrink-0">
                         <span><kbd className="font-mono">↑↓</kbd> navigate</span>
@@ -329,7 +445,7 @@ export function SearchPalette() {
                     <div className="flex gap-3 shrink-0">
                         {enabled && data && (
                             <span className="tabular-nums">
-                                {flat.length} result{flat.length === 1 ? '' : 's'} · {data.ms}ms
+                                {entityItems.length} match{entityItems.length === 1 ? '' : 'es'} · {data.ms}ms
                             </span>
                         )}
                         <span><kbd className="font-mono">Esc</kbd> close</span>
@@ -337,5 +453,52 @@ export function SearchPalette() {
                 </div>
             </DialogContent>
         </Dialog>
+    );
+}
+
+function PaletteSection({
+    title, count, dot, children,
+}: {
+    title: string;
+    count: number;
+    dot?: string;
+    children: React.ReactNode;
+}) {
+    return (
+        <section>
+            <header className="px-3 pt-2 pb-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                {dot && <span className={cn('inline-block size-1 rounded-full', dot)} />}
+                <span>{title}</span>
+                <span className="opacity-50 tabular-nums">· {count}</span>
+            </header>
+            <ul>{children}</ul>
+        </section>
+    );
+}
+
+function PaletteRowButton({
+    focused, onClick, onMouseEnter, indented, children,
+}: {
+    focused: boolean;
+    onClick: () => void;
+    onMouseEnter: () => void;
+    indented?: boolean;
+    children: React.ReactNode;
+}) {
+    return (
+        <li>
+            <button
+                type="button"
+                onClick={onClick}
+                onMouseEnter={onMouseEnter}
+                className={cn(
+                    'w-full flex items-center gap-3 text-left px-3 py-2',
+                    indented ? 'pl-6' : 'pl-3',
+                    focused ? 'bg-accent' : 'hover:bg-accent/50',
+                )}
+            >
+                {children}
+            </button>
+        </li>
     );
 }
