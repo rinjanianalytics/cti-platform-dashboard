@@ -16,7 +16,7 @@
 import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { iocs, type IOC } from '@/lib/api';
+import { iocs, watch, type IOC } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -201,15 +201,15 @@ export default function IOCsPage() {
     };
 
     const watchSelection = async () => {
-        // Same stand-in as the drawer's Watch action — mark each as
-        // `suspicious` via the verdict endpoint until a real watchlist
-        // exists. Async, but we toast a single success at the end so the
-        // user gets one notification, not N.
+        // Pin each selected IOC to the current user's watchlist via
+        // /v1/watch (cti-platform-api PR #20). The endpoint is
+        // idempotent — re-pinning an already-pinned IOC succeeds — so
+        // we don't need to filter the selection by "not already
+        // watched" first.
         const ids = Array.from(selectedIds);
         try {
-            await Promise.all(ids.map(id => iocs.setVerdict(id, 'suspicious', 'Bulk watch')));
+            await Promise.all(ids.map(id => watch.pin({ entityType: 'ioc', entityId: id })));
             toast.success(`Watching ${ids.length} indicators`);
-            await mutate();
             clearSelection();
         } catch (e) {
             toast.error((e as Error).message || 'Bulk watch failed');

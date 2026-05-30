@@ -883,6 +883,62 @@ export const events = {
     },
 };
 
+/* ============================================================================
+   Personal watch — pinned entities (IOC / CVE / actor).
+   Distinct from notifications (the per-user inbox) and from "watchlists"
+   (named curated lists of IOC observables). This is the simple primitive
+   that backs the Watch button on entity drawers and the Indicators bulk
+   action bar.
+   ========================================================================= */
+
+export type WatchEntityType = 'ioc' | 'cve' | 'actor';
+
+export interface WatchItem {
+    id: string;
+    entityType: WatchEntityType;
+    entityId: string;
+    note: string | null;
+    createdAt: string;
+}
+
+export const watch = {
+    /** Pin an entity. Idempotent — re-calling for an already-pinned entity
+     *  succeeds and refreshes the note. */
+    async pin(opts: {
+        entityType: WatchEntityType;
+        entityId: string;
+        note?: string;
+    }): Promise<WatchItem> {
+        return request('/v1/watch', { method: 'POST', body: opts });
+    },
+
+    /** Unpin. Idempotent — succeeds even when the entity wasn't pinned. */
+    async unpin(entityType: WatchEntityType, entityId: string): Promise<{ removed: boolean }> {
+        return request(`/v1/watch/${entityType}/${encodeURIComponent(entityId)}`, { method: 'DELETE' });
+    },
+
+    /** List the current user's watched entities, optionally filtered by
+     *  type. Used by ActorWatchlistPanel on the Command screen. */
+    async list(opts: { type?: WatchEntityType; limit?: number } = {}): Promise<{
+        items: WatchItem[];
+    }> {
+        const qs = new URLSearchParams();
+        if (opts.type) qs.set('type', opts.type);
+        if (opts.limit) qs.set('limit', String(opts.limit));
+        const query = qs.toString();
+        return request(`/v1/watch${query ? `?${query}` : ''}`);
+    },
+
+    /** Single-entity check — backs the drawer's initial Watch button state
+     *  without paginating the full list. */
+    async check(entityType: WatchEntityType, entityId: string): Promise<{
+        watched: boolean;
+        createdAt: string | null;
+    }> {
+        return request(`/v1/watch/check/${entityType}/${encodeURIComponent(entityId)}`);
+    },
+};
+
 export interface LandscapeOverview {
     period: string;
     iocs: { total: number; critical: number; high: number; avgScore: number };

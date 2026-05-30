@@ -12,18 +12,17 @@
  *
  * Pivot in graph uses the actor name as the seed value — the graph
  * explorer accepts actor names for actor-graph mode (see screens-graph
- * spec). Watch isn't wired today (no watchlist endpoint); button shown
- * as a toast for symmetry across types.
+ * spec). Watch is wired to /v1/watch (cti-platform-api PR #20) — the
+ * Phase-3 watchlist endpoint that retired the earlier toast stand-in.
  */
 
 import useSWR from 'swr';
-import { toast } from 'sonner';
 import { actors } from '@/lib/api';
 import { relTime } from '@/lib/utils';
 import { Sev, type Severity } from '../sev';
 import {
     DrawerSection, AttrList, TagsRow, DrawerActions,
-    RelatedSection, SightingTrend, DrawerFooter,
+    RelatedSection, SightingTrend, DrawerFooter, useWatchToggle,
 } from './shared';
 
 function sophisticationToSev(raw: string | null | undefined): Severity {
@@ -40,6 +39,11 @@ export function ActorContent({ idOrName }: { idOrName: string }) {
         ['drawer:actor', idOrName],
         () => actors.get(idOrName),
     );
+
+    // Actor pins use the UUID (`data.id`) rather than the name — names
+    // are mutable + non-unique (multiple "Lazarus Group" rows from
+    // different feeds), the UUID is the stable identifier.
+    const { watched, toggle: handleWatch } = useWatchToggle('actor', data?.id);
 
     if (isLoading) {
         return <DrawerSection><div className="text-text-3 text-[12.5px]">Loading…</div></DrawerSection>;
@@ -75,7 +79,8 @@ export function ActorContent({ idOrName }: { idOrName: string }) {
                 <DrawerActions
                     pivotValue={data.name}
                     copyValue={data.name}
-                    onWatch={() => toast.info('Watchlist endpoint lands in Phase 3.')}
+                    onWatch={handleWatch}
+                    watchActive={watched}
                 />
             </DrawerSection>
 
