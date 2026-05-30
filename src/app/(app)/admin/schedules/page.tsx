@@ -15,7 +15,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Clock, Play, Pause, CalendarClock, Loader2 } from 'lucide-react';
 import { relTime } from '@/lib/utils';
 import { toast } from 'sonner';
-import { PageHeader, RefreshAction } from '@/components/admin/page-header';
+import { RefreshAction } from '@/components/admin/page-header';
 import { RowCard } from '@/components/admin/row-card';
 import { StatField } from '@/components/admin/stat';
 import { StatusBadge, type StatusKind } from '@/lib/tone';
@@ -85,14 +85,18 @@ export default function AdminSchedulesPage() {
     }
 
     return (
-        <div className="space-y-6">
-            <PageHeader
-                title="Schedules"
-                description={isLoading
-                    ? 'Loading…'
-                    : `${enabledCount}/${jobs.length} active · ${overriddenCount} customised`}
-                actions={<RefreshAction onClick={() => mutate()} />}
-            />
+        <div className="space-y-4">
+            <div className="flex items-end justify-between gap-4 flex-wrap">
+                <div>
+                    <h1 className="h-page">Schedules</h1>
+                    <p className="sub tabular-nums mt-1">
+                        {isLoading
+                            ? 'Loading…'
+                            : `${enabledCount}/${jobs.length} active · ${overriddenCount} customised`}
+                    </p>
+                </div>
+                <RefreshAction onClick={() => mutate()} />
+            </div>
 
             {isLoading && (
                 <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">Loading schedules…</CardContent></Card>
