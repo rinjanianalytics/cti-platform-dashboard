@@ -202,7 +202,11 @@ export function CcDataTable<T>({
                     } : undefined}
                 >
                     {selection && (
-                        <td className={cn('pl-3', cellY)} data-row-checkbox>
+                        <td
+                            style={{ width: '2.5rem' }}
+                            className={cn('pl-3', cellY)}
+                            data-row-checkbox
+                        >
                             <input
                                 type="checkbox"
                                 checked={isSelected}
@@ -216,6 +220,7 @@ export function CcDataTable<T>({
                     {columns.map(col => (
                         <td
                             key={col.id}
+                            style={colWidthStyle(col.width)}
                             // `overflow-hidden` is a safety net — `<col>` sets
                             // the column width; a cell renderer that forgets
                             // `truncate` would otherwise paint into the next
