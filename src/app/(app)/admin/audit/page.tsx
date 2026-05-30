@@ -15,7 +15,6 @@ import {
 import { EmptyState } from '@/components/ui/empty-state';
 import { ScrollText, Filter, X, RefreshCw } from 'lucide-react';
 import { cn, relTime } from '@/lib/utils';
-import { PageHeader, RefreshAction } from '@/components/admin/page-header';
 
 const PAGE_SIZE = 50;
 
@@ -24,22 +23,27 @@ const ENTITY_TYPES: AuditEntityType[] = [
 ];
 const ACTIONS: AuditAction[] = ['create', 'update', 'delete', 'merge', 'enrich'];
 
+// Per the design: CREATE = low/green, UPDATE = info, DELETE = crit.
+// Merge + enrich aren't in the design spec — pick something that
+// reads at a glance without competing with the named-trio palette.
 const ACTION_TONE: Record<string, string> = {
-    create:  'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-    update:  'bg-blue-500/15 text-blue-400 border-blue-500/30',
-    delete:  'bg-red-500/15 text-red-400 border-red-500/30',
-    merge:   'bg-fuchsia-500/15 text-fuchsia-400 border-fuchsia-500/30',
-    enrich:  'bg-amber-500/15 text-amber-400 border-amber-500/30',
+    create:  'bg-sev-low-soft  text-sev-low  border-[color:var(--sev-low)]',
+    update:  'bg-sev-info-soft text-sev-info border-[color:var(--sev-info)]',
+    delete:  'bg-sev-crit-soft text-sev-crit border-[color:var(--sev-crit)]',
+    merge:   'bg-brand-soft    text-brand    border-brand-line',
+    enrich:  'bg-sev-med-soft  text-sev-med  border-[color:var(--sev-med)]',
 };
 
+// Per the design: USER violet (custom), THREAT_ACTOR med, IOC accent
+// (the brand), FEED info. Everything else falls through to muted bg-2.
 const ENTITY_TONE: Record<string, string> = {
-    user:           'bg-violet-500/15 text-violet-400 border-violet-500/30',
-    ioc:            'bg-blue-500/15 text-blue-400 border-blue-500/30',
-    vulnerability:  'bg-red-500/15 text-red-400 border-red-500/30',
-    threat_actor:   'bg-amber-500/15 text-amber-400 border-amber-500/30',
-    pulse:          'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-    indicator:      'bg-slate-500/15 text-slate-400 border-slate-500/30',
-    malware:        'bg-fuchsia-500/15 text-fuchsia-400 border-fuchsia-500/30',
+    user:           'bg-[oklch(0.45_0.13_295_/_0.16)] text-[oklch(0.75_0.13_295)] border-[color:oklch(0.55_0.13_295_/_0.36)]',
+    ioc:            'bg-brand-soft    text-brand    border-brand-line',
+    vulnerability:  'bg-sev-high-soft text-sev-high border-[color:var(--sev-high)]',
+    threat_actor:   'bg-sev-med-soft  text-sev-med  border-[color:var(--sev-med)]',
+    pulse:          'bg-sev-info-soft text-sev-info border-[color:var(--sev-info)]',
+    indicator:      'bg-bg-2 text-text-3 border-line-soft',
+    malware:        'bg-sev-crit-soft text-sev-crit border-[color:var(--sev-crit)]',
 };
 
 export default function AdminAuditPage() {
@@ -92,17 +96,23 @@ export default function AdminAuditPage() {
     }
 
     return (
-        <div className="space-y-6">
-            <PageHeader
-                title="Audit log"
-                description={isLoading
-                    ? 'Loading…'
-                    : `${total.toLocaleString()} entr${total === 1 ? 'y' : 'ies'}${stats ? ` · ${stats.total.toLocaleString()} in the last ${stats.days} days` : ''}`}
-                actions={<RefreshAction onClick={() => mutate()} />}
-            />
+        <div className="space-y-4">
+            <div className="flex items-end justify-between gap-4 flex-wrap">
+                <div>
+                    <h1 className="h-page">Audit log</h1>
+                    <p className="sub tabular-nums mt-1">
+                        {isLoading
+                            ? 'Loading…'
+                            : `${total.toLocaleString()} entr${total === 1 ? 'y' : 'ies'}${stats ? ` · ${stats.total.toLocaleString()} in the last ${stats.days} days` : ''}`}
+                    </p>
+                </div>
+                <Button size="sm" variant="ghost" onClick={() => mutate()}>
+                    <RefreshCw className="size-3.5" /> Refresh
+                </Button>
+            </div>
 
-            <Card>
-                <CardContent className="py-3 space-y-3">
+            <div className="panel panel-pad">
+                <div className="space-y-3">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Filter className="size-3.5" /> Filters
                         {hasFilters && (
@@ -140,8 +150,8 @@ export default function AdminAuditPage() {
                             placeholder="To" className="h-9"
                         />
                     </div>
-                </CardContent>
-            </Card>
+                </div>
+            </div>
 
             {isLoading && (
                 <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">Loading…</CardContent></Card>
