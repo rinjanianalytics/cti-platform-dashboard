@@ -1,5 +1,18 @@
 'use client';
 
+/**
+ * Indicators — Command Center refit (Phase 2).
+ *
+ * URL is the source of truth for filters (q, type, severity, source, page)
+ * so deep links from the overview (e.g. /iocs?severity=critical) and
+ * shareable links Just Work. Local state mirrors the URL and pushes back
+ * on every change via router.replace.
+ *
+ * Per-row click opens the entity drawer (overlay) instead of routing to
+ * /iocs/[id]. The detail page is still reachable directly for shareable
+ * URLs, but the drawer is the default in-flow interaction.
+ */
+
 import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -8,23 +21,25 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
     Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { Combobox } from '@/components/ui/combobox';
-import { EmptyState } from '@/components/ui/empty-state';
-import { Plus, Search, X, Radar } from 'lucide-react';
+import {
+    Plus, Search, X, Eye, GitFork, Download, Workflow,
+} from 'lucide-react';
 import { toast } from 'sonner';
-import { cn, severityTone, relTime } from '@/lib/utils';
+import { cn, relTime } from '@/lib/utils';
+import { CcDataTable, type CcColumn } from '@/components/cc/data-table';
+import { Sev, normalizeSeverity, type Severity } from '@/components/cc/sev';
+import { Tags } from '@/components/cc/tags';
+import { ConfBar } from '@/components/cc/conf-bar';
+import { BulkActionBar } from '@/components/cc/bulk-action-bar';
+import { useEntityDrawer } from '@/components/cc/entity-drawer';
 
-// Values must match the canonical IOC type buckets the API filters on.
-// (All hash algorithms live under `hash`; differentiation is in the value
-// itself / patternType. Hostnames are stored as `domain`.)
 const TYPE_FILTERS = [
     { value: 'all',    label: 'All types' },
     { value: 'ip',     label: 'IP' },
@@ -50,10 +65,9 @@ export default function IOCsPage() {
     const router = useRouter();
     const pathname = usePathname();
     const initialParams = useSearchParams();
+    const drawer = useEntityDrawer();
 
-    // URL is the source of truth for filters so deep-links from the Overview
-    // (e.g. /iocs?severity=critical) and shareable links Just Work. Local
-    // state mirrors the URL and pushes back on every change via router.replace.
+    // URL-mirrored filter state.
     const [q, setQ] = useState(() => initialParams.get('q') ?? '');
     const [type, setType] = useState(() => initialParams.get('type') ?? 'all');
     const [severity, setSeverity] = useState(() => initialParams.get('severity') ?? 'all');
@@ -63,6 +77,9 @@ export default function IOCsPage() {
         return Number.isFinite(n) && n > 0 ? n : 1;
     });
     const [createOpen, setCreateOpen] = useState(false);
+
+    // Row selection — IDs only; the bulk bar reads count from selectedIds.size.
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
     // Sync state → URL. Skip the param when it's at its default so the URL
     // stays clean (`?severity=critical` not `?severity=critical&type=all&page=1`).
@@ -75,7 +92,6 @@ export default function IOCsPage() {
         if (page > 1) next.set('page', String(page));
         const qs = next.toString();
         const target = qs ? `${pathname}?${qs}` : pathname;
-        // Avoid history spam: replace, don't push.
         router.replace(target, { scroll: false });
     }, [q, type, severity, source, page, pathname, router]);
 
@@ -94,87 +110,119 @@ export default function IOCsPage() {
     const items = data?.items ?? [];
     const total = data?.pagination?.total ?? 0;
 
-
-    const columns: ColumnDef<IOC>[] = [
+    const columns: CcColumn<IOC>[] = [
         {
             id: 'type',
             header: 'Type',
             width: 'w-20',
-            accessor: r => r.type,
             sortable: true,
-            cell: r => <span className="text-xs text-muted-foreground uppercase tracking-wider">{r.type}</span>,
+            cell: r => <span className="font-mono text-[11px] uppercase tracking-wider text-text-3">{r.type}</span>,
         },
         {
             id: 'value',
             header: 'Value',
-            accessor: r => r.value,
             sortable: true,
-            cell: r => <span className="font-mono text-sm truncate block max-w-120">{r.value}</span>,
+            cell: r => (
+                <span className="font-mono text-[13px] truncate block max-w-[46ch]">{r.value}</span>
+            ),
         },
         {
             id: 'source',
             header: 'Source',
-            width: 'w-30',
-            accessor: r => r.source,
+            width: 'w-28',
             sortable: true,
-            cell: r => <span className="text-xs text-muted-foreground">{r.source}</span>,
+            cell: r => <span className="font-mono text-[12px] text-text-3">{r.source}</span>,
         },
         {
             id: 'severity',
             header: 'Severity',
-            width: 'w-28',
-            accessor: r => r.severity,
+            width: 'w-24',
             sortable: true,
             cell: r => r.severity
-                ? <Badge variant="outline" className={cn('font-mono text-[10px] uppercase', severityTone(r.severity))}>{r.severity}</Badge>
-                : <span className="text-xs text-muted-foreground">—</span>,
+                ? <Sev level={normalizeSeverity(r.severity)} short />
+                : <span className="text-text-4">—</span>,
         },
         {
             id: 'confidence',
             header: 'Conf.',
-            width: 'w-18',
+            width: 'w-24',
             align: 'right',
-            accessor: r => r.confidence,
             sortable: true,
-            cell: r => <span className="text-xs text-muted-foreground tabular-nums">{r.confidence != null ? `${r.confidence}%` : '—'}</span>,
+            cell: r => r.confidence != null
+                ? <ConfBar value={r.confidence} />
+                : <span className="text-text-4 text-[11px]">—</span>,
         },
         {
             id: 'tags',
             header: 'Tags',
             width: 'w-56',
-            accessor: r => r.tags?.join(', '),
-            cell: r => {
-                const tags = r.tags ?? [];
-                if (tags.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
-                return (
-                    <span className="inline-flex items-center gap-1 max-w-56 overflow-hidden">
-                        {tags.slice(0, 2).map(t => (
-                            <Badge key={t} variant="outline" className="text-[10px] font-mono shrink-0">{t}</Badge>
-                        ))}
-                        {tags.length > 2 && (
-                            <span className="text-[10px] text-muted-foreground shrink-0">+{tags.length - 2}</span>
-                        )}
-                    </span>
-                );
-            },
+            cell: r => <Tags items={r.tags ?? []} max={2} />,
         },
         {
             id: 'lastSeen',
             header: 'Seen',
             width: 'w-20',
             align: 'right',
-            accessor: r => r.lastSeen ? Date.parse(r.lastSeen) : null,
             sortable: true,
-            cell: r => <span className="text-xs text-muted-foreground tabular-nums">{relTime(r.lastSeen)}</span>,
+            cell: r => <span className="text-[11px] text-text-3 font-mono tnum">{relTime(r.lastSeen)}</span>,
         },
     ];
 
+    const sevTint = (r: IOC): Severity | null =>
+        r.severity ? normalizeSeverity(r.severity) : null;
+
+    /* ── Bulk actions ──────────────────────────────────────────────── */
+    const clearSelection = () => setSelectedIds(new Set());
+
+    const exportSelection = () => {
+        // CSV of the selected IOCs — done client-side from the page's current
+        // dataset because the API doesn't expose a bulk-fetch-by-ids endpoint
+        // (a Phase 3 backend item). For now you can only export what's on the
+        // current page, which mirrors what the user sees.
+        const rows = items.filter(r => selectedIds.has(r.id));
+        if (rows.length === 0) { toast.error('Selection is empty on this page'); return; }
+        const csv = [
+            ['type', 'value', 'source', 'severity', 'confidence', 'tags', 'first_seen', 'last_seen'].join(','),
+            ...rows.map(r => [
+                r.type, JSON.stringify(r.value), r.source, r.severity ?? '',
+                r.confidence ?? '',
+                JSON.stringify((r.tags ?? []).join(' ')),
+                r.firstSeen ?? '', r.lastSeen ?? '',
+            ].join(',')),
+        ].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `iocs-${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast.success(`Exported ${rows.length} indicators`);
+    };
+
+    const watchSelection = async () => {
+        // Same stand-in as the drawer's Watch action — mark each as
+        // `suspicious` via the verdict endpoint until a real watchlist
+        // exists. Async, but we toast a single success at the end so the
+        // user gets one notification, not N.
+        const ids = Array.from(selectedIds);
+        try {
+            await Promise.all(ids.map(id => iocs.setVerdict(id, 'suspicious', 'Bulk watch')));
+            toast.success(`Watching ${ids.length} indicators`);
+            await mutate();
+            clearSelection();
+        } catch (e) {
+            toast.error((e as Error).message || 'Bulk watch failed');
+        }
+    };
+
     return (
-        <div className="space-y-6">
-            <div className="flex items-end justify-between gap-4 flex-wrap">
+        <div className="flex flex-col h-full gap-3">
+            {/* Header */}
+            <div className="flex items-end justify-between gap-4 flex-wrap shrink-0">
                 <div>
-                    <h1 className="text-3xl font-semibold tracking-tight">Indicators</h1>
-                    <p className="text-sm text-muted-foreground mt-1 tabular-nums">
+                    <h1 className="h-page">Indicators</h1>
+                    <p className="sub tabular-nums mt-1">
                         {isLoading ? 'Loading…' : `${total.toLocaleString()} indicators across all sources`}
                     </p>
                 </div>
@@ -189,9 +237,9 @@ export default function IOCsPage() {
             </div>
 
             {/* Filters */}
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
                 <div className="relative flex-1 min-w-60 max-w-md">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-text-3" />
                     <Input
                         value={q}
                         onChange={(e) => { setQ(e.target.value); setPage(1); }}
@@ -201,7 +249,7 @@ export default function IOCsPage() {
                     {q && (
                         <button
                             onClick={() => { setQ(''); setPage(1); }}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-text-3 hover:text-text"
                         >
                             <X className="size-3.5" />
                         </button>
@@ -225,47 +273,72 @@ export default function IOCsPage() {
                         ))}
                     </SelectContent>
                 </Select>
-
-                {/* Source filter as a dismissible chip — set by deep links from
-                    the Overview's "Top sources" panel; no static UI control for
-                    it because the source list grows with feed configuration. */}
                 {source && (
-                    <Badge
-                        variant="outline"
-                        className="h-9 px-3 gap-2 font-mono text-[11px] uppercase tracking-wider"
-                    >
+                    <span className={cn(
+                        'h-9 px-3 inline-flex items-center gap-2 rounded-md border border-line-soft bg-bg-1',
+                        'font-mono text-[11px] uppercase tracking-wider text-text-2',
+                    )}>
                         source: {source}
                         <button
                             type="button"
                             onClick={() => { setSource(''); setPage(1); }}
                             aria-label={`Clear source filter: ${source}`}
-                            className="text-muted-foreground hover:text-foreground"
+                            className="text-text-3 hover:text-text"
                         >
                             <X className="size-3" />
                         </button>
-                    </Badge>
+                    </span>
                 )}
             </div>
 
-            <DataTable
-                columns={columns}
-                data={items}
-                rowKey={r => r.id}
-                isLoading={isLoading}
-                onRowClick={r => router.push(`/iocs/${r.id}`)}
-                page={page}
-                pageSize={PAGE_SIZE}
-                total={total}
-                onPageChange={setPage}
-                density="compact"
-                emptyState={
-                    <EmptyState
-                        icon={Radar}
-                        title="No indicators in scope"
-                        description="No IOCs match the current filter set. Loosen the type, severity, or search query — or record one manually."
-                        action={{ label: 'New indicator', onClick: () => setCreateOpen(true) }}
-                    />
-                }
+            {/* Table — flex-1 so it owns the remaining vertical space and the
+                sticky header + pager work as intended. */}
+            <div className="flex-1 min-h-0">
+                <CcDataTable
+                    columns={columns}
+                    data={items}
+                    rowKey={r => r.id}
+                    isLoading={isLoading}
+                    onRowClick={r => drawer.open({ type: 'ioc', id: r.id })}
+                    sevtintFn={sevTint}
+                    selection={{ selectedIds, onChange: setSelectedIds }}
+                    page={page}
+                    pageSize={PAGE_SIZE}
+                    total={total}
+                    onPageChange={setPage}
+                />
+            </div>
+
+            {/* Bulk action bar — floats above the page when ≥1 selected. */}
+            <BulkActionBar
+                count={selectedIds.size}
+                onClear={clearSelection}
+                actions={[
+                    {
+                        id: 'watch', label: 'Watch',
+                        icon: <Eye className="size-3.5" />,
+                        onClick: watchSelection,
+                    },
+                    {
+                        id: 'pivot', label: 'Pivot',
+                        icon: <GitFork className="size-3.5" />,
+                        onClick: () => {
+                            const first = items.find(r => selectedIds.has(r.id));
+                            if (first) window.location.assign(`/graph?seed=${encodeURIComponent(first.value)}`);
+                        },
+                    },
+                    {
+                        id: 'export', label: 'Export',
+                        icon: <Download className="size-3.5" />,
+                        onClick: exportSelection,
+                    },
+                    {
+                        id: 'playbook', label: 'Playbook',
+                        icon: <Workflow className="size-3.5" />,
+                        primary: true,
+                        onClick: () => toast.info('Playbook builder lands in Phase 3.'),
+                    },
+                ]}
             />
         </div>
     );

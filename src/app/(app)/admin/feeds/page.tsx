@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { cn, relTime } from '@/lib/utils';
 import { toast } from 'sonner';
-import { PageHeader, RefreshAction } from '@/components/admin/page-header';
+import { RefreshAction } from '@/components/admin/page-header';
 import { RowCard } from '@/components/admin/row-card';
 import { StatField } from '@/components/admin/stat';
 import { CardExpandFooter } from '@/components/admin/card-expand-footer';
@@ -99,14 +99,18 @@ export default function AdminFeedsPage() {
     }
 
     return (
-        <div className="space-y-6">
-            <PageHeader
-                title="Feeds"
-                description={isLoading
-                    ? 'Loading…'
-                    : `${enabledCount}/${feeds.length} active · ${ingestedRecent.toLocaleString()} items in last runs${erroringCount > 0 ? ` · ${erroringCount} failing` : ''}`}
-                actions={<RefreshAction onClick={() => mutate()} />}
-            />
+        <div className="space-y-4">
+            <div className="flex items-end justify-between gap-4 flex-wrap">
+                <div>
+                    <h1 className="h-page">Feed config</h1>
+                    <p className="sub tabular-nums mt-1">
+                        {isLoading
+                            ? 'Loading…'
+                            : `${enabledCount}/${feeds.length} active · ${ingestedRecent.toLocaleString()} items in last runs${erroringCount > 0 ? ` · ${erroringCount} failing` : ''}`}
+                    </p>
+                </div>
+                <RefreshAction onClick={() => mutate()} />
+            </div>
 
             {isLoading && (
                 <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">Loading feeds…</CardContent></Card>
