@@ -30,13 +30,33 @@
  * about what they're sorting.
  */
 
-import { type ReactNode } from 'react';
+import { type ReactNode, type CSSProperties } from 'react';
 import { ChevronDown, ChevronUp, ChevronsUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useTweaks, type DensityKey } from './tweaks';
 import { Segmented } from './segmented';
 import type { Severity } from './sev';
+
+/**
+ * Tailwind `w-N` → CSS width string (N × 0.25rem). Returns `undefined` for
+ * un-widthed or non-spacing values so `<col>` claims its share of the
+ * table's remaining space.
+ *
+ * Inline styles are used on `<col>` instead of className because some
+ * Tailwind v4 + Turbopack pipelines drop classes that only ever appear on
+ * `<col>` elements from the generated CSS bundle, leaving the colgroup
+ * widthless and the body cells negotiating widths against header cells
+ * (which DO have working classes via `<th>`) — the head/body shift the
+ * user sees in /iocs, /vulnerabilities, /actors. Parsing to inline CSS
+ * sidesteps the whole Tailwind layer here.
+ */
+function colWidthStyle(cls: string | undefined): CSSProperties | undefined {
+    if (!cls) return undefined;
+    const m = cls.match(/^w-(\d+)$/);
+    if (!m) return undefined;
+    return { width: `${Number(m[1]) * 0.25}rem` };
+}
 
 export type SortDir = 'asc' | 'desc';
 export interface SortState { id: string; dir: SortDir }
@@ -258,9 +278,9 @@ export function CcDataTable<T>({
             <div className="flex-1 min-h-0 overflow-auto">
                 <table className="w-full text-sm border-separate border-spacing-0 table-fixed">
                     <colgroup>
-                        {selection && <col className="w-10" />}
+                        {selection && <col style={{ width: '2.5rem' }} />}
                         {columns.map(col => (
-                            <col key={col.id} className={col.width} />
+                            <col key={col.id} style={colWidthStyle(col.width)} />
                         ))}
                     </colgroup>
                     <thead>
