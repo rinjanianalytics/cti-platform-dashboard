@@ -396,21 +396,29 @@
 .sev.low  { color: var(--sev-low);  background: var(--sev-low-s); }
 .sev.info { color: var(--sev-info); background: var(--sev-info-s); }
 
-/* Sevtint — left-edge severity strip on table rows. The component wraps a
-   <tr> in a class like `sevtint sevtint-high`; the strip is a left border. */
-.sevtint { position: relative; }
-.sevtint::before {
+/* Sevtint — left-edge severity strip on table rows.
+   The stripe is anchored to the row's FIRST <td>, not the <tr> itself.
+   Generated content (::before) on a `display: table-row` element with
+   absolute positioning is a long-standing Chromium edge case: in some
+   layouts it makes the browser allocate a phantom cell slot at the
+   start of the row, which pushes body cells one column to the right
+   of the corresponding <th>. Anchoring the stripe inside the first <td>
+   avoids that quirk entirely while keeping the same visual: the cell
+   spans the row's full height so a stripe inside it visually fills
+   the row's left edge. */
+.sevtint > td:first-child { position: relative; }
+.sevtint > td:first-child::before {
     content: "";
     position: absolute;
     left: 0; top: 0; bottom: 0;
     width: 3px;
     background: transparent;
 }
-.sevtint-crit::before { background: var(--sev-crit); }
-.sevtint-high::before { background: var(--sev-high); }
-.sevtint-med::before  { background: var(--sev-med); }
-.sevtint-low::before  { background: var(--sev-low); }
-.sevtint-info::before { background: var(--sev-info); }
+.sevtint-crit > td:first-child::before { background: var(--sev-crit); }
+.sevtint-high > td:first-child::before { background: var(--sev-high); }
+.sevtint-med  > td:first-child::before { background: var(--sev-med); }
+.sevtint-low  > td:first-child::before { background: var(--sev-low); }
+.sevtint-info > td:first-child::before { background: var(--sev-info); }
 
 /* Chip — 21px mono pill used for tags, TLP markers, environment chips. */
 .chip {
