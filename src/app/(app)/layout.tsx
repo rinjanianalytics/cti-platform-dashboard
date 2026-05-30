@@ -21,6 +21,7 @@ import { Logo } from '@/components/brand/logo';
 import { BuildBadge } from '@/components/build-badge';
 import { TweaksProvider } from '@/components/cc/tweaks';
 import { Topbar } from '@/components/cc/topbar';
+import { EntityDrawerProvider, EntityDrawer } from '@/components/cc/entity-drawer';
 
 /**
  * Command Center sidebar — four semantic groups instead of one flat list.
@@ -108,6 +109,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
     return (
         <TweaksProvider>
+            <EntityDrawerProvider>
             <SidebarProvider>
                 <Sidebar collapsible="icon">
                     <SidebarEdgeToggle />
@@ -170,6 +172,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <MobileBottomNav />
                 <SearchPalette />
             </SidebarProvider>
+            <EntityDrawer />
+            </EntityDrawerProvider>
         </TweaksProvider>
     );
 }
