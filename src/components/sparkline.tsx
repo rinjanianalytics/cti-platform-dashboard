@@ -3,45 +3,80 @@
 import { cn } from '@/lib/utils';
 
 /**
- * Compact SVG sparkline — pattern-filled area + smooth path, no chart library.
+ * Inline SVG sparkline — area fill + smooth path + optional end-cap dot.
  *
- * Design adapted from the Workbench fork's `SummaryCard` so the embedded
- * `/admin/workbench` overview and our own `Threat overview` KPI strip share
- * a visual idiom (operator's eye can pattern-match between the two surfaces).
+ * Two visual variants:
+ *   - `gradient` (default, Command Center) — vertical alpha ramp from
+ *     the tone colour to transparent. Tighter, less busy than hatched.
+ *   - `pattern` — diagonal hatching, matches the embedded Workbench's
+ *     summary cards. Use when the surface needs to visually rhyme with
+ *     Workbench (overview KPI strip → Workbench overview, etc.).
  *
- * The component is intentionally tone-aware: the same chart shape reads as
- * "good" or "bad" depending on what's being measured (more IOCs = activity,
- * more failures = problem). Callers pick the `tone`.
+ * Tones map to Command Center tokens (`var(--brand)`, `var(--sev-*)`,
+ * `var(--ok|warn|down)`) so the chart automatically follows the theme
+ * when the Tweaks panel swaps the accent. The legacy `success/danger/
+ * warning/muted` tones are kept as aliases for callers that pre-date
+ * the Command Center palette.
  */
 
-export type SparklineTone = 'success' | 'danger' | 'warning' | 'muted';
+export type SparklineTone =
+    | 'brand' | 'ok' | 'warn' | 'down'
+    | 'sev-crit' | 'sev-high' | 'sev-med' | 'sev-low' | 'sev-info'
+    // legacy aliases (Phase 1 keeps these so the existing overview page
+    // doesn't break mid-merge if the rebuild lands separately):
+    | 'success' | 'danger' | 'warning' | 'muted';
 
 interface SparklineProps {
-    /** Series of numbers — the array length is the X axis (one point per index). */
+    /** Series of numbers — array length is the X axis (one point per index). */
     data: number[];
-    /** Optional override for the wrapping <svg>'s class — sizing, etc. */
     className?: string;
     tone?: SparklineTone;
-    /** ARIA label so screen readers don't see "blank SVG". */
+    variant?: 'gradient' | 'pattern';
+    width?: number;
+    height?: number;
+    strokeWidth?: number;
+    /** End-cap dot at the last point. Defaults to true for the gradient variant. */
+    endCap?: boolean;
+    /** ARIA label — fall back to "Trend, N buckets". */
     label?: string;
 }
 
-const tones: Record<SparklineTone, { stroke: string; fill: string }> = {
-    success: { stroke: 'stroke-emerald-500',  fill: 'fill-emerald-500' },
-    danger:  { stroke: 'stroke-rose-500',     fill: 'fill-rose-500'    },
-    warning: { stroke: 'stroke-amber-500',    fill: 'fill-amber-500'   },
-    muted:   { stroke: 'stroke-muted-foreground', fill: 'fill-muted-foreground' },
+const TONE_VAR: Record<SparklineTone, string> = {
+    'brand':    'var(--brand)',
+    'ok':       'var(--ok)',
+    'warn':     'var(--warn)',
+    'down':     'var(--down)',
+    'sev-crit': 'var(--sev-crit)',
+    'sev-high': 'var(--sev-high)',
+    'sev-med':  'var(--sev-med)',
+    'sev-low':  'var(--sev-low)',
+    'sev-info': 'var(--sev-info)',
+    // legacy mapping
+    'success':  'var(--ok)',
+    'danger':   'var(--down)',
+    'warning':  'var(--warn)',
+    'muted':    'var(--text-3)',
 };
 
-export function Sparkline({ data, className, tone = 'success', label }: SparklineProps) {
+export function Sparkline({
+    data,
+    className,
+    tone = 'brand',
+    variant = 'gradient',
+    width = 80,
+    height = 24,
+    strokeWidth = 1.5,
+    endCap,
+    label,
+}: SparklineProps) {
     if (!data || data.length === 0) return null;
+
+    const colour = TONE_VAR[tone];
 
     // Render a flat baseline when every bucket is zero — without this special
     // case the y-normalisation collapses to NaN and the path disappears.
     const allZero = data.every(d => d === 0);
 
-    const width = 80;
-    const height = 24;
     const max = Math.max(...data, 1);
     const min = Math.min(...data, 0);
     const range = max - min || 1;
@@ -49,44 +84,65 @@ export function Sparkline({ data, className, tone = 'success', label }: Sparklin
     const points = data.map((value, i) => {
         const x = (i / Math.max(data.length - 1, 1)) * width;
         const y = allZero ? height - 1 : height - ((value - min) / range) * (height - 2) - 1;
-        return `${x},${y}`;
+        return { x, y };
     });
 
-    const linePath = `M ${points.join(' L ')}`;
-    const areaPoints = [`0,${height}`, ...points, `${width},${height}`].join(' ');
+    const linePath = `M ${points.map(p => `${p.x},${p.y}`).join(' L ')}`;
+    const areaPoints = [`0,${height}`, ...points.map(p => `${p.x},${p.y}`), `${width},${height}`].join(' ');
 
-    const { stroke, fill } = tones[tone];
-    const patternId = `sparkline-pattern-${tone}`;
+    const last = points[points.length - 1];
+    const showCap = (endCap ?? variant === 'gradient') && !allZero;
+
+    // Per-instance gradient/pattern ID so multiple sparklines with different
+    // tones don't collide in the SVG defs namespace.
+    const gradId    = `cc-spark-grad-${tone}-${variant}`;
+    const patternId = `cc-spark-pat-${tone}-${variant}`;
 
     return (
         <svg
             viewBox={`0 0 ${width} ${height}`}
             preserveAspectRatio="none"
-            className={cn('h-6 w-20 shrink-0', className)}
+            className={cn('shrink-0', className)}
+            style={{ width, height }}
             role="img"
             aria-label={label ?? `Trend, ${data.length} buckets`}
         >
             <defs>
-                {/* Hatched fill — same idiom as Workbench so the two surfaces visually rhyme. */}
-                <pattern id={patternId} x="0" y="0" width="4" height="4" patternUnits="userSpaceOnUse">
-                    <rect width="4" height="4" className={cn(fill, 'opacity-15')} />
-                    <path
-                        d="M0,0 L4,4 M-1,3 L3,7 M-1,-1 L5,5"
-                        className={stroke}
-                        strokeWidth="0.75"
-                        opacity="0.4"
-                    />
-                </pattern>
+                {variant === 'gradient' ? (
+                    <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%"   stopColor={colour} stopOpacity="0.32" />
+                        <stop offset="100%" stopColor={colour} stopOpacity="0" />
+                    </linearGradient>
+                ) : (
+                    <pattern id={patternId} x="0" y="0" width="4" height="4" patternUnits="userSpaceOnUse">
+                        <rect width="4" height="4" fill={colour} opacity="0.15" />
+                        <path
+                            d="M0,0 L4,4 M-1,3 L3,7 M-1,-1 L5,5"
+                            stroke={colour}
+                            strokeWidth="0.75"
+                            opacity="0.4"
+                            fill="none"
+                        />
+                    </pattern>
+                )}
             </defs>
-            {!allZero && <polygon points={areaPoints} fill={`url(#${patternId})`} />}
+            {!allZero && (
+                <polygon
+                    points={areaPoints}
+                    fill={variant === 'gradient' ? `url(#${gradId})` : `url(#${patternId})`}
+                />
+            )}
             <path
                 d={linePath}
                 fill="none"
-                strokeWidth="1.5"
+                stroke={colour}
+                strokeWidth={strokeWidth}
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className={cn('stroke-current', stroke)}
             />
+            {showCap && (
+                <circle cx={last.x} cy={last.y} r={1.6} fill={colour} />
+            )}
         </svg>
     );
 }
