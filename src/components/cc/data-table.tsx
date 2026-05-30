@@ -203,7 +203,6 @@ export function CcDataTable<T>({
                 >
                     {selection && (
                         <td
-                            style={{ width: '2.5rem' }}
                             className={cn('pl-3', cellY)}
                             data-row-checkbox
                         >
@@ -218,13 +217,13 @@ export function CcDataTable<T>({
                         </td>
                     )}
                     {columns.map(col => (
+                        // No inline width on <td> — the colgroup is the single
+                        // source of column widths. Inline widths on body cells
+                        // caused them to layout independently of the header in
+                        // table-auto mode, producing the head/body column
+                        // shift we saw in the DevTools dump.
                         <td
                             key={col.id}
-                            style={colWidthStyle(col.width)}
-                            // `overflow-hidden` is a safety net — `<col>` sets
-                            // the column width; a cell renderer that forgets
-                            // `truncate` would otherwise paint into the next
-                            // column.
                             className={cn(
                                 'px-3 overflow-hidden',
                                 cellY,
@@ -300,12 +299,21 @@ export function CcDataTable<T>({
                             <col key={col.id} style={colWidthStyle(col.width)} />
                         ))}
                     </colgroup>
-                    <thead>
+                    {/* `position: sticky` on <thead> instead of each <th>.
+                        Sticky-on-th causes Chromium to exclude the cell from
+                        the table's auto column-width pass — body cells then
+                        compute widths independently and shift one column
+                        right of the header. Sticky on <thead> keeps the
+                        whole row pinned without breaking column negotiation.
+                        The bg-bg-2 underline lives on a span inside the th
+                        because <thead> backgrounds don't paint reliably
+                        when sticky. */}
+                    <thead className="sticky top-0 z-10 bg-bg-2">
                         <tr>
                             {selection && (
                                 <th
                                     style={{ width: '2.5rem' }}
-                                    className="pl-3 py-2 text-left sticky top-0 z-10 bg-bg-2 border-b border-line-soft"
+                                    className="pl-3 py-2 text-left border-b border-line-soft"
                                 >
                                     <input
                                         type="checkbox"
@@ -319,10 +327,6 @@ export function CcDataTable<T>({
                             )}
                             {columns.map(col => {
                                 const sortedByMe = sort?.id === col.id;
-                                // Apply width inline on the <th> too — `table-fixed`
-                                // resolves column widths from the FIRST ROW when a
-                                // <col> width doesn't take effect (e.g. some
-                                // Tailwind/Turbopack pipelines). Belt and braces.
                                 const widthStyle = colWidthStyle(col.width);
                                 return (
                                     <th
@@ -330,7 +334,7 @@ export function CcDataTable<T>({
                                         style={widthStyle}
                                         className={cn(
                                             'px-3 py-2 text-left font-medium text-[11px] text-text-3',
-                                            'sticky top-0 z-10 bg-bg-2 border-b border-line-soft',
+                                            'border-b border-line-soft',
                                             col.align === 'right' && 'text-right',
                                             col.align === 'center' && 'text-center',
                                             col.sortable && 'cursor-pointer select-none hover:text-text',
