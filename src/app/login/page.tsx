@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 import { useAuth } from '@/lib/auth';
@@ -25,17 +25,19 @@ import { cn } from '@/lib/utils';
  * Brand discipline: only brand teal (`--brand`) as the accent. No other
  * colored elements. Semantic destructive/success colours unused on this page.
  */
-export default function LoginPage() {
-    const { login } = useAuth();
-    const [apiKey, setApiKey] = useState('');
-    const [busy, setBusy] = useState(false);
-
+/**
+ * Isolates `useSearchParams()` so the rest of the page can be statically
+ * prerendered. Next.js 16 refuses to prerender any subtree that reads
+ * search params (they aren't known until request time) — without this
+ * boundary, `next build` fails with "useSearchParams() should be wrapped
+ * in a suspense boundary at page \"/login\"".
+ *
+ * Renders nothing — its only job is to fire toast effects based on
+ * OAuth redirect params. The Suspense fallback is also null because
+ * there's nothing visual to fall back to.
+ */
+function OAuthRedirectToasts() {
     const params = useSearchParams();
-    const { data: providers } = useSWR('auth:oauth-providers', () => authApi.oauthProviders(), {
-        revalidateOnFocus: false,
-        dedupingInterval: 60_000,
-    });
-
     useEffect(() => {
         const err = params.get('error');
         const reason = params.get('reason');
@@ -55,6 +57,18 @@ export default function LoginPage() {
                 : `Sign-in error: ${err}`;
         toast.error('OAuth sign-in failed', { description: human });
     }, [params]);
+    return null;
+}
+
+export default function LoginPage() {
+    const { login } = useAuth();
+    const [apiKey, setApiKey] = useState('');
+    const [busy, setBusy] = useState(false);
+
+    const { data: providers } = useSWR('auth:oauth-providers', () => authApi.oauthProviders(), {
+        revalidateOnFocus: false,
+        dedupingInterval: 60_000,
+    });
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -73,6 +87,12 @@ export default function LoginPage() {
 
     return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4 py-10 relative overflow-hidden">
+            {/* Suspense-wrapped because `useSearchParams()` inside
+                opts the entire subtree out of static prerender. The
+                rest of this page can be prerendered safely. */}
+            <Suspense fallback={null}>
+                <OAuthRedirectToasts />
+            </Suspense>
             {/* Single ambient brand wash anchored top-center. Spotify's page is
                 visually clean — we keep one element of atmosphere because the
                 rest of the platform leans on dotted grids + brand glows. */}
