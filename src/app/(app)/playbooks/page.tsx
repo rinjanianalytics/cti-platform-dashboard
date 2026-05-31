@@ -220,6 +220,12 @@ function CreatePlaybookSheet({ open, onClose, onCreated }: {
     };
 
     // Reset whenever the sheet is closed so a re-open starts fresh.
+    // Suppressed because react-hooks/set-state-in-effect can't see that
+    // `reset` only runs in response to `open` flipping false (an
+    // external prop change), not from a render cycle that would
+    // cascade. The alternative — hoisting reset() into the caller's
+    // onOpenChange — leaks form state out of this dialog wrapper.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     React.useEffect(() => { if (!open) reset(); }, [open]);
 
     const stepValid =
