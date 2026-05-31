@@ -38,21 +38,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
         }
 
+        // Route both branches through one promise chain so `setIsLoading(false)`
+        // only fires from `.finally()` — avoids the synchronous setState-in-effect
+        // path that trips `react-hooks/set-state-in-effect`.
         const token = getToken();
-        if (!token) {
-            setIsLoading(false);
-            return;
-        }
-        // Re-sync — for users whose localStorage already has a token (e.g.
-        // upgraded across the cookie-auth deploy), this populates the
-        // `rinjani_token` cookie that embedded UIs like Workbench rely on.
-        // No-op for fresh logins since `setToken` was just called there.
-        setToken(token);
-        auth.me().then(setUser)
-            .catch((err) => {
-                if (err instanceof ApiError && err.status === 401) setToken(null);
-            })
-            .finally(() => setIsLoading(false));
+        const ready: Promise<void> = token
+            ? (
+                // Re-sync — for users whose localStorage already has a token
+                // (e.g. upgraded across the cookie-auth deploy), this
+                // populates the `rinjani_token` cookie that embedded UIs
+                // like Workbench rely on. No-op for fresh logins since
+                // `setToken` was just called there.
+                setToken(token),
+                auth.me().then(setUser).catch((err) => {
+                    if (err instanceof ApiError && err.status === 401) setToken(null);
+                })
+            )
+            : Promise.resolve();
+        ready.finally(() => setIsLoading(false));
     }, []);
 
     // Route protection — redirect unauth users off protected pages
