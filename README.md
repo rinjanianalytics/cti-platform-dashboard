@@ -12,11 +12,47 @@ Paired with [cti-platform-api](https://github.com/rinjanianalytics/cti-platform-
 
 ---
 
-## 📸 Screenshot
+## 📸 Tour
+
+### Threat Command — analyst dashboard (`/`)
+KPI tiles with rolling-window sparklines and delta %, CRIT-IOC priority triage, severity distribution, ATT&CK coverage, indicator types, trending tags, actor watchlist, and a semantic events rail on the right (KEV adds, high-CVSS CVEs, new actors, big pulses, sync failures). The 24H / 7D / 30D switcher scopes every tile and panel to the selected window.
 
 ![Threat Command — analyst dashboard](docs/screenshots/dashboard.png)
 
-The Command page (`/`) is the analyst's at-a-glance entry point: KPI tiles with rolling-window sparklines and delta %, a CRIT-IOC priority triage queue, severity distribution, ATT&CK coverage, indicator types, trending tags, actor watchlist, and a semantic events stream (KEV adds, high-CVSS CVEs, new actors, big pulses, sync failures). The 24H / 7D / 30D switcher scopes every tile and panel to the selected window.
+### Indicators (`/iocs`)
+IPs / domains / hashes / URLs with type + severity filters, type-ahead search, sev-tinted left edge, and a click-through entity drawer with Pivot-in-graph, Copy, and Watch actions.
+
+![Indicators](docs/screenshots/dashboard-indicators.png)
+
+### Vulnerabilities (`/vulnerabilities`)
+Vendor/product, CVSS, KEV-only toggle, published-date range filter. Each row deep-links to the CVE drawer with KEV chip, attributes, and related entities via vector similarity.
+
+![Vulnerabilities](docs/screenshots/dashboard-vulnerabilities.png)
+
+### Threat actors (`/actors`)
+APT groups with aliases, sophistication, motivation, resource level, and a composite **activity** score (OTX pulse mentions × TTP recency × sophistication × recency bonus — not just `last_seen DESC`). "AI enrich missing" fires Gemini against blank fields.
+
+![Threat actors](docs/screenshots/dashboard-threat-actors.png)
+
+### Graph explorer (`/graph`)
+Type a seed (IOC value, actor name, technique ID) and expand the neighbourhood via Cypher. Force-directed: actor ↔ technique ↔ malware ↔ IOC ↔ vuln.
+
+![Graph explorer](docs/screenshots/dashboard-graph.png)
+
+### Services (`/admin/services`)
+One-pane ops health: Postgres / OpenSearch / Neo4j / Redis × 2, API + worker liveness, bootlock state, queue depths, recent feed-sync results, LLM provider + enrichment-source config.
+
+![Services](docs/screenshots/dashboard-services.png)
+
+### Feeds (`/feeds`)
+Analyst-facing landscape rotation: live per-source counters (OTX pulses today / week / total) plus the latest pulse stream — title, description, tags, ingestion timestamp.
+
+![Feeds](docs/screenshots/dashboard-feeds.png)
+
+### Feed config (`/admin/feeds`)
+Toggle each upstream sync on/off, set the polling interval, see the last sync's success/fail status, and **Run now** to fire an immediate sync. Writes through to the same `reconcileScheduledJob` control plane Workbench uses.
+
+![Feed config](docs/screenshots/dashboard-feed-config.png)
 
 ---
 
