@@ -14,6 +14,11 @@ Paired with [cti-platform-api](https://github.com/rinjanianalytics/cti-platform-
 
 ## 📸 Tour
 
+### Sign in (`/login`)
+Two-pane "command identity" + "secure access" layout. Left pane carries the brand: ambient grid + animated node graph + live status strip (indicators, active feeds, UTC platform clock). Right pane is OAuth-first (Google / GitHub, discovered via `GET /auth/oauth/providers`) with an API-key fallback for service-to-service flows. Built from the Rinjani Admin Dashboard refactor handoff; design tokens mapped to the existing `--brand` (Rinjani teal) so the page stays on-palette.
+
+![Sign in](docs/screenshots/login-page.png)
+
 ### Threat Command — analyst dashboard (`/`)
 KPI tiles with rolling-window sparklines and delta %, CRIT-IOC priority triage, severity distribution, ATT&CK coverage, indicator types, trending tags, actor watchlist, and a semantic events rail on the right (KEV adds, high-CVSS CVEs, new actors, big pulses, sync failures). The 24H / 7D / 30D switcher scopes every tile and panel to the selected window.
 
