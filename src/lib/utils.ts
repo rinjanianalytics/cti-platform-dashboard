@@ -92,6 +92,44 @@ export function cvssTone(score: number | null | undefined): string {
     return severityTextTone(cvssToSeverity(score));
 }
 
+/**
+ * Format a confidence value for display. STIX threat actors use a string
+ * enum ("none" | "low" | "medium" | "high"); IOCs and LLM-enriched actors
+ * store 0-100. We normalise both to a human label.
+ */
+export function formatConfidence(raw: string | number | null | undefined): string {
+    if (raw == null || raw === '') return '—';
+    const s = String(raw).trim();
+    const n = Number(s);
+    if (Number.isFinite(n)) {
+        // Probability (0-1) vs percentage (0-100) — scale up if needed.
+        const pct = n <= 1 && n > 0 ? Math.round(n * 100) : Math.round(n);
+        return `${Math.max(0, Math.min(100, pct))}%`;
+    }
+    return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
+
+/**
+ * Map confidence to a 0-100 number so it can drive visualizations (bars,
+ * comparisons). String-enum values pin to representative percentages; the
+ * exact midpoints don't matter — only the ordering does, since the bar
+ * normalizes against `max` from the visible set.
+ */
+export function confidenceToNumber(raw: string | number | null | undefined): number {
+    if (raw == null || raw === '') return 0;
+    const s = String(raw).trim().toLowerCase();
+    const n = Number(s);
+    if (Number.isFinite(n)) {
+        const pct = n <= 1 && n > 0 ? n * 100 : n;
+        return Math.max(0, Math.min(100, Math.round(pct)));
+    }
+    if (s === 'high') return 85;
+    if (s === 'medium') return 55;
+    if (s === 'low') return 25;
+    if (s === 'none') return 5;
+    return 0;
+}
+
 export function relTime(d: string | null | undefined): string {
     if (!d) return '—';
     const t = Date.parse(d);

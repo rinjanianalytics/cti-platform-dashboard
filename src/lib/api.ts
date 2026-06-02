@@ -1086,7 +1086,14 @@ export interface ThreatActor {
     primaryMotivation: string | null;
     goals: string[] | null;
     labels: string[] | null;
-    confidence: number | null;
+    /**
+     * `threat_actors.confidence` is `varchar(20)` — STIX uses a string enum
+     * ("none" | "low" | "medium" | "high"). LLM-enriched actors and some
+     * STIX implementations write a 0–100 number instead. Render via
+     * `formatConfidence` / `confidenceToNumber` in `@/lib/utils` to handle
+     * both shapes uniformly.
+     */
+    confidence: string | number | null;
     country: string | null;
     /** When the upstream source first observed this actor. */
     firstSeen: string | null;
