@@ -848,12 +848,16 @@ export const platform = {
         return request('/v1/stats/source-breakdown');
     },
     /**
-     * `?days=N` opt-in (rolling-window switcher). Default behaviour on
-     * the backend is the previous 30-day window.
+     * `?hours=N` for sub-day windows (6h / 24h toggles on the feeds page);
+     * `?days=N` for everything else. Backend prefers `hours` when both are
+     * set; default behaviour with neither is the previous 30-day window.
      */
-    async trendingTags(opts: { days?: number } = {}): Promise<Array<{ tag: string; count: number; hot: boolean }>> {
-        const qs = opts.days != null ? `?days=${opts.days}` : '';
-        return request(`/v1/stats/trending-tags${qs}`);
+    async trendingTags(opts: { hours?: number; days?: number } = {}): Promise<Array<{ tag: string; count: number; hot: boolean }>> {
+        const qs = new URLSearchParams();
+        if (opts.hours != null) qs.set('hours', String(opts.hours));
+        else if (opts.days != null) qs.set('days', String(opts.days));
+        const s = qs.toString();
+        return request(`/v1/stats/trending-tags${s ? `?${s}` : ''}`);
     },
     async feedMonitoring(): Promise<{
         feeds: Array<{
@@ -1086,7 +1090,14 @@ export interface ThreatActor {
     primaryMotivation: string | null;
     goals: string[] | null;
     labels: string[] | null;
-    confidence: number | null;
+    /**
+     * `threat_actors.confidence` is `varchar(20)` — STIX uses a string enum
+     * ("none" | "low" | "medium" | "high"). LLM-enriched actors and some
+     * STIX implementations write a 0–100 number instead. Render via
+     * `formatConfidence` / `confidenceToNumber` in `@/lib/utils` to handle
+     * both shapes uniformly.
+     */
+    confidence: string | number | null;
     country: string | null;
     /** When the upstream source first observed this actor. */
     firstSeen: string | null;

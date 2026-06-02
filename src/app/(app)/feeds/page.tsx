@@ -7,10 +7,9 @@
  *   1. Page head: "Feeds" + count of ingested pulses
  *   2. Landscape shift band — repeat(6,1fr) of top-mover tag cards
  *      with the 6h / 24h / 7d window segmented at the band header.
- *      The backend's `/trending-tags` endpoint doesn't expose a
- *      window selector today, so the segmented control is present
- *      for the design language but the data is the rolling default.
- *      Wiring it to a real window is Phase 3 backend work.
+ *      Each window re-queries the backend's `/v1/stats/trending-tags`
+ *      with `?hours=6`, `?hours=24`, or `?days=7` respectively, and
+ *      SWR re-keys on the window so the cards refresh on toggle.
  *   3. Pulse search toolbar (client-side filter on the page slice)
  *   4. Pulse panels — stacked, sev-dot + title + summary +
  *      tag chips; right column: TLP chip, IOC count (brand if >0),
@@ -69,9 +68,13 @@ export default function FeedsPage() {
         { refreshInterval: REFRESH_MS },
     );
 
+    const trendingOpts: { hours?: number; days?: number } =
+        window_ === '6H'  ? { hours: 6 }  :
+        window_ === '24H' ? { hours: 24 } :
+                            { days: 7 };
     const { data: trending } = useSWR(
-        'feeds:trending',
-        () => platform.trendingTags(),
+        ['feeds:trending', window_],
+        () => platform.trendingTags(trendingOpts),
         { refreshInterval: REFRESH_MS },
     );
 

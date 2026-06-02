@@ -54,10 +54,8 @@ function describeCron(cron: string | null): string {
         '0 4 * * 0':    'weekly · Sunday 04:00',
     };
     if (known[cron]) return known[cron];
-    if (/^\d+ \*\/(\d+) \* \* \*$/.test(cron)) {
-        const [, , hours] = cron.match(/^\d+ \*\/(\d+) \* \* \*$/) ?? [];
-        return `every ${hours} hours`;
-    }
+    const m = cron.match(/^\d+ \*\/(\d+) \* \* \*$/);
+    if (m) return `every ${m[1]} hours`;
     return cron;
 }
 
