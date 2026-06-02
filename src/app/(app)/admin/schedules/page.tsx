@@ -52,10 +52,8 @@ function describeCron(cron: string | null): string {
     if (known[cron]) return known[cron];
 
     // Heuristics for ad-hoc patterns
-    if (/^\d+ \*\/(\d+) \* \* \*$/.test(cron)) {
-        const [, , hours] = cron.match(/^\d+ \*\/(\d+) \* \* \*$/) ?? [];
-        return `every ${hours} hours`;
-    }
+    const everyN = cron.match(/^\d+ \*\/(\d+) \* \* \*$/);
+    if (everyN) return `every ${everyN[1]} hours`;
     if (/^\d+ \d+ \* \* \d$/.test(cron)) return 'weekly';
     if (/^\d+ \d+ \* \* \*$/.test(cron)) return 'daily';
 
