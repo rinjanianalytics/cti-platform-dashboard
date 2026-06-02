@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, ExternalLink, Sparkles } from 'lucide-react';
+import { formatConfidence } from '@/lib/utils';
 import { toast } from 'sonner';
 import { relTime } from '@/lib/utils';
 import { SimilarPanel } from '@/components/similar-panel';
@@ -195,24 +196,6 @@ export default function ActorDetailPage({ params }: { params: Promise<{ id: stri
             )}
         </div>
     );
-}
-
-/**
- * threat_actors.confidence is varchar(20) — STIX canonically uses a string
- * enum ("none" | "low" | "medium" | "high"), but some implementations
- * (OpenCTI, our LLM enrichment) write 0-100. Display each appropriately.
- */
-function formatConfidence(raw: string | number | null | undefined): string {
-    if (raw == null || raw === '') return '—';
-    const s = String(raw).trim();
-    const n = Number(s);
-    if (Number.isFinite(n)) {
-        // Probability (0-1) vs percentage (0-100) — scale up if needed.
-        const pct = n <= 1 && n > 0 ? Math.round(n * 100) : Math.round(n);
-        return `${Math.max(0, Math.min(100, pct))}%`;
-    }
-    // String enum — capitalize for display.
-    return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 }
 
 function FieldRow({ label, value }: { label: string; value: React.ReactNode }) {

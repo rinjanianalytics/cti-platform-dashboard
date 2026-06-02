@@ -11,11 +11,14 @@
  *     expert → high, intermediate → med, minimal → low, else → info).
  *     Reuses the Sev component instead of growing a bespoke colour map.
  *   - Resource is an uppercase chip
- *   - Activity column on the right = score bar + number; we don't have
- *     a per-actor score on the list endpoint (the Overview's
- *     activeActors does; the list endpoint doesn't), so we render the
- *     `confidence` field as a visual stand-in until the backend
- *     surfaces a real activity score (Phase 3).
+ *   - Confidence column = score bar + label; the value is either the
+ *     STIX string enum ("low" | "medium" | "high") or a 0-100 number
+ *     depending on whether the actor came from a STIX feed or LLM
+ *     enrichment. `confidenceToNumber` normalises both shapes to drive
+ *     the bar width, `formatConfidence` formats the label. An "Activity"
+ *     score (recency-weighted incident count) is a Phase 3 item; until
+ *     then this column at least tells the analyst how reliable the
+ *     record is.
  *
  * Row click → actor drawer.
  */
@@ -37,7 +40,7 @@ import {
 } from '@/components/ui/dialog';
 import { Plus, Search, X, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { cn, relTime } from '@/lib/utils';
+import { cn, relTime, confidenceToNumber, formatConfidence } from '@/lib/utils';
 import { CcDataTable, type CcColumn } from '@/components/cc/data-table';
 import { Sev, type Severity } from '@/components/cc/sev';
 import { useEntityDrawer } from '@/components/cc/entity-drawer';
@@ -117,7 +120,7 @@ export default function ActorsPage() {
         }
     };
 
-    const maxActivity = items.reduce((m, a) => Math.max(m, a.confidence ?? 0), 1);
+    const maxConfidence = items.reduce((m, a) => Math.max(m, confidenceToNumber(a.confidence)), 1);
 
     const columns: CcColumn<ThreatActor>[] = [
         {
@@ -176,24 +179,25 @@ export default function ActorsPage() {
                 : <span className="text-text-4">—</span>,
         },
         {
-            id: 'activity',
-            header: 'Activity',
+            id: 'confidence',
+            header: 'Confidence',
             width: 'w-36',
             align: 'right',
             sortable: true,
             cell: a => {
-                const v = a.confidence ?? 0;
+                const v = confidenceToNumber(a.confidence);
                 if (v === 0) return <span className="text-text-4 text-[11px]">—</span>;
                 const hot = v > 70;
+                const label = formatConfidence(a.confidence);
                 return (
                     <span className="inline-flex items-center gap-2 justify-end">
                         <span className="w-22.5 h-1.5 bg-bg-3 rounded-full overflow-hidden">
                             <span
                                 className={cn('block h-full rounded-full', hot ? 'bg-sev-high' : 'bg-brand')}
-                                style={{ width: `${(v / maxActivity) * 100}%` }}
+                                style={{ width: `${(v / maxConfidence) * 100}%` }}
                             />
                         </span>
-                        <span className="font-mono text-[11.5px] tnum text-text-2 w-7 text-right">{v}</span>
+                        <span className="font-mono text-[11.5px] tnum text-text-2 w-12 text-right">{label}</span>
                     </span>
                 );
             },
