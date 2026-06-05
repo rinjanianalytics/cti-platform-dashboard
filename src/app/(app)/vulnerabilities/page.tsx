@@ -154,16 +154,24 @@ export default function VulnerabilitiesPage() {
                 );
             },
         },
-        // EPSS column slot — uncomment once `r.epssScore` lands on the
-        // Vulnerability schema (Phase 1 Roadmap, enrichment phase 1).
-        // {
-        //     id: 'epss', header: 'EPSS', width: 'w-16', align: 'right', sortable: true,
-        //     cell: r => r.epssScore != null
-        //         ? <span className={cn('font-mono text-[12.5px] tnum', r.epssScore > 0.5 ? 'text-sev-high' : 'text-text-3')}>
-        //               {(r.epssScore * 100).toFixed(0)}%
-        //           </span>
-        //         : <span className="text-text-4">—</span>,
-        // },
+        // EPSS = FIRST.org's daily exploit-prediction score (0..1, probability
+        // of exploitation in the next 30 days). Renders as a percentage so
+        // analysts read it the same way as CVSS — high values turn sev-high
+        // so the "score >= 0.5" critical-band reads at a glance. Backend
+        // surfaces this via /v1/vulnerabilities (bulk PG fallback) so older
+        // OpenSearch indexes don't block the column.
+        {
+            id: 'epss',
+            header: 'EPSS',
+            width: 'w-16',
+            align: 'right',
+            sortable: true,
+            cell: r => r.epssScore != null
+                ? <span className={cn('font-mono text-[12.5px] tnum', r.epssScore >= 0.5 ? 'text-sev-high' : 'text-text-3')}>
+                      {(r.epssScore * 100).toFixed(0)}%
+                  </span>
+                : <span className="text-text-4">—</span>,
+        },
         {
             id: 'kev',
             header: 'KEV',
