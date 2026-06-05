@@ -1029,6 +1029,14 @@ export interface Vulnerability {
     /** Indexer's updatedAt — set to `lastModified` at index time, so use
      *  this as the canonical "last touched" timestamp for the row. */
     updatedAt: string | null;
+    /**
+     * EPSS — FIRST.org daily exploit-prediction score. Both fields are
+     * 0–1 floats; null until the daily EPSS sync has scored this CVE.
+     * Refreshed within 24h of new CVEs hitting the corpus.
+     */
+    epssScore: number | null;
+    epssPercentile: number | null;
+    epssUpdatedAt: string | null;
 }
 
 export interface VulnListResponse {
