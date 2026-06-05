@@ -94,9 +94,22 @@ export default function FeedDetailPage({ params }: { params: Promise<{ id: strin
                         <CardTitle className="text-base">Targeting</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3 text-sm">
-                        <FieldRow label="IOCs" value={
+                        {/* Prefer the count of IOCs we ACTUALLY have linked in our DB
+                            (`relatedIOCs.length`, same source as the "Linked indicators"
+                            panel below) over the upstream OTX pulse's self-reported
+                            `indicatorCount`. The two diverge when the pulse ingestor
+                            partially fails or when OTX reports IOCs that don't deduplicate
+                            into our schema — and showing OTX's number while the panel
+                            below shows the actual linked rows reads as a data integrity
+                            bug. `??` was also a hidden trap here: `0 ?? x` keeps the 0,
+                            so a pulse with `indicatorCount=0` always rendered "0 IOCs"
+                            even when we had real linked rows to show. */}
+                        <FieldRow label="Linked IOCs" value={
                             <span className="font-mono tabular-nums">
-                                {pulse.indicatorCount?.toLocaleString() ?? relatedIOCs.length.toLocaleString()}
+                                {(relatedIOCs.length > 0
+                                    ? relatedIOCs.length
+                                    : (pulse.indicatorCount ?? 0)
+                                ).toLocaleString()}
                             </span>
                         } />
                         <FieldRow label="Tags" value={
