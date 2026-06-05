@@ -187,7 +187,17 @@ export default function CommandPage() {
                     sparkTone="sev-high"
                     delta={deltaPct(sparks?.vulnerabilities)}
                     sub={landscape
-                        ? `${fmt(landscape.vulnerabilities.high)} high · ${fmt(landscape.vulnerabilities.critical)} crit`
+                        ? [
+                            `${fmt(landscape.vulnerabilities.high)} high`,
+                            `${fmt(landscape.vulnerabilities.critical)} crit`,
+                            // Only render the KEV chunk when the backend
+                            // surfaced it. Older API revs that omit `inKev`
+                            // shouldn't render "0 KEV" — that reads as
+                            // "no exploitation" rather than "data unknown".
+                            landscape.vulnerabilities.inKev != null
+                                ? `${fmt(landscape.vulnerabilities.inKev)} KEV`
+                                : null,
+                        ].filter(Boolean).join(' · ')
                         : undefined}
                 />
                 <KpiTile
