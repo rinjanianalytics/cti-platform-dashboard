@@ -1000,7 +1000,12 @@ export const watch = {
 export interface LandscapeOverview {
     period: string;
     iocs: { total: number; critical: number; high: number; avgScore: number };
-    vulnerabilities: { total: number; critical: number; high: number };
+    /** `inKev` is the count of CVEs in the window also on CISA's Known
+     *  Exploited Vulnerabilities catalog — drives the Vulnerabilities tile
+     *  sub-line. Older API revs that predate cti-platform-api PR #43 omit
+     *  the field; the UI treats `undefined` as "no signal" and hides the
+     *  KEV chip rather than rendering "0 KEV" misleadingly. */
+    vulnerabilities: { total: number; critical: number; high: number; inKev?: number };
     notifications: { total: number };
     iocTypeDistribution: Array<{ type: string; count: number }>;
     topSources: Array<{ source: string; count: number }>;
