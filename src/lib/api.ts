@@ -1190,6 +1190,16 @@ export interface Pulse {
     tags: string[] | null;
     targetedCountries: string[] | null;
     industries: string[] | null;
+    /** Named adversary (group / actor) when the analyst attributed one. */
+    adversary: string | null;
+    /** Malware families called out in the pulse, e.g. "Emotet", "Lumma". */
+    malwareFamilies: string[] | null;
+    /** MITRE ATT&CK technique IDs the pulse maps to, e.g. ["T1059.001", "T1566"]. */
+    attackIds: string[] | null;
+    /** URLs to source articles + vendor write-ups OTX bundled with the pulse. */
+    references: string[] | null;
+    /** OTX community subscribers — light signal for pulse impact. */
+    subscriberCount: number | null;
     indicatorCount: number | null;
     otxCreated: string | null;
     otxModified: string | null;

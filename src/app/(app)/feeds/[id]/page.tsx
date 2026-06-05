@@ -52,8 +52,26 @@ export default function FeedDetailPage({ params }: { params: Promise<{ id: strin
     const tags = pulse.tags ?? [];
     const countries = pulse.targetedCountries ?? [];
     const industries = pulse.industries ?? [];
+    const malware = pulse.malwareFamilies ?? [];
+    const techniques = pulse.attackIds ?? [];
+    const references = pulse.references ?? [];
     const relatedIOCs = pulse.relatedIOCs ?? [];
     const tlp = pulse.tlp?.toLowerCase();
+    const linkedCount = relatedIOCs.length > 0 ? relatedIOCs.length : (pulse.indicatorCount ?? 0);
+
+    // Pulses authored by automated OTX pipelines (subscriber_count=0 and no
+    // adversary / tags / industries / countries / malware) routinely arrive
+    // with all targeting metadata empty. That's genuinely upstream-sparse —
+    // not our ingest losing data. When we detect that shape, swap the
+    // dashes-on-dashes Targeting card for an explicit empty-state note so
+    // analysts can tell "OTX has nothing here" from "we lost the fields".
+    const hasTargetingMetadata =
+        tags.length > 0 ||
+        countries.length > 0 ||
+        industries.length > 0 ||
+        malware.length > 0 ||
+        techniques.length > 0 ||
+        !!pulse.adversary;
 
     return (
         <div className="space-y-6">
@@ -94,41 +112,121 @@ export default function FeedDetailPage({ params }: { params: Promise<{ id: strin
                         <CardTitle className="text-base">Targeting</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3 text-sm">
-                        {/* Prefer the count of IOCs we ACTUALLY have linked in our DB
-                            (`relatedIOCs.length`, same source as the "Linked indicators"
-                            panel below) over the upstream OTX pulse's self-reported
-                            `indicatorCount`. The two diverge when the pulse ingestor
-                            partially fails or when OTX reports IOCs that don't deduplicate
-                            into our schema — and showing OTX's number while the panel
-                            below shows the actual linked rows reads as a data integrity
-                            bug. `??` was also a hidden trap here: `0 ?? x` keeps the 0,
-                            so a pulse with `indicatorCount=0` always rendered "0 IOCs"
-                            even when we had real linked rows to show. */}
+                        {/* Linked IOC count: prefer the rows we actually have in
+                            our DB (matches the panel below) over OTX's self-
+                            reported `indicatorCount`, which is routinely a stale
+                            0 on the list endpoint. See PR #45 for the worker-
+                            side fix; this is the display-side belt-and-braces. */}
                         <FieldRow label="Linked IOCs" value={
-                            <span className="font-mono tabular-nums">
-                                {(relatedIOCs.length > 0
-                                    ? relatedIOCs.length
-                                    : (pulse.indicatorCount ?? 0)
-                                ).toLocaleString()}
-                            </span>
+                            <span className="font-mono tabular-nums">{linkedCount.toLocaleString()}</span>
                         } />
-                        <FieldRow label="Tags" value={
-                            tags.length === 0 ? '—' : (
-                                <div className="flex flex-wrap gap-1">
-                                    {tags.map(t => <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>)}
-                                </div>
-                            )
-                        } />
-                        <FieldRow label="Industries" value={
-                            industries.length === 0 ? '—' : industries.join(', ')
-                        } />
-                        <FieldRow label="Countries" value={
-                            countries.length === 0 ? '—' : countries.join(', ')
-                        } />
+
+                        {hasTargetingMetadata ? (
+                            <>
+                                {pulse.adversary && (
+                                    <FieldRow label="Adversary" value={
+                                        <span className="font-medium text-foreground">{pulse.adversary}</span>
+                                    } />
+                                )}
+                                {tags.length > 0 && (
+                                    <FieldRow label="Tags" value={
+                                        <div className="flex flex-wrap gap-1">
+                                            {tags.map(t => <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>)}
+                                        </div>
+                                    } />
+                                )}
+                                {malware.length > 0 && (
+                                    <FieldRow label="Malware" value={
+                                        <div className="flex flex-wrap gap-1">
+                                            {malware.map(m => (
+                                                <Badge key={m} variant="outline" className="text-[10px] bg-red-500/10 text-red-400 border-red-500/30">
+                                                    {m}
+                                                </Badge>
+                                            ))}
+                                        </div>
+                                    } />
+                                )}
+                                {techniques.length > 0 && (
+                                    <FieldRow label="ATT&CK" value={
+                                        // Link out to MITRE's official technique
+                                        // page rather than an internal /techniques/
+                                        // route — we don't have one yet. Sub-
+                                        // technique IDs like "T1059.001" map to
+                                        // attack.mitre.org/techniques/T1059/001/.
+                                        <div className="flex flex-wrap gap-1">
+                                            {techniques.map(t => {
+                                                const slug = t.replace('.', '/');
+                                                return (
+                                                    <a
+                                                        key={t}
+                                                        href={`https://attack.mitre.org/techniques/${slug}/`}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="inline-flex"
+                                                    >
+                                                        <Badge variant="outline" className="text-[10px] font-mono hover:bg-accent transition-colors cursor-pointer">
+                                                            {t}
+                                                        </Badge>
+                                                    </a>
+                                                );
+                                            })}
+                                        </div>
+                                    } />
+                                )}
+                                {industries.length > 0 && (
+                                    <FieldRow label="Industries" value={industries.join(', ')} />
+                                )}
+                                {countries.length > 0 && (
+                                    <FieldRow label="Countries" value={countries.join(', ')} />
+                                )}
+                            </>
+                        ) : (
+                            // Honest empty state: distinguishes upstream-sparse
+                            // from "we lost the fields during ingest". Removes
+                            // the wall-of-dashes UX that reads as broken.
+                            <p className="text-xs text-muted-foreground italic">
+                                No targeting metadata published with this pulse upstream.
+                            </p>
+                        )}
+
                         <FieldRow label="Created" value={pulse.otxCreated ? new Date(pulse.otxCreated).toLocaleDateString() : '—'} />
+                        {pulse.subscriberCount != null && pulse.subscriberCount > 0 && (
+                            <FieldRow label="Subscribers" value={
+                                <span className="font-mono tabular-nums">{pulse.subscriberCount.toLocaleString()}</span>
+                            } />
+                        )}
                     </CardContent>
                 </Card>
             </div>
+
+            {references.length > 0 && (
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-base">References ({references.length})</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <ul className="space-y-1.5 text-sm">
+                            {references.slice(0, 20).map((url, i) => (
+                                <li key={`${url}:${i}`} className="truncate">
+                                    <a
+                                        href={url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-blue-400 hover:underline font-mono text-xs"
+                                    >
+                                        {url}
+                                    </a>
+                                </li>
+                            ))}
+                            {references.length > 20 && (
+                                <li className="text-xs text-muted-foreground italic">
+                                    +{references.length - 20} more
+                                </li>
+                            )}
+                        </ul>
+                    </CardContent>
+                </Card>
+            )}
 
             <SimilarPanel docId={pulse.id} type="pulse" />
 
