@@ -143,6 +143,21 @@ export default function VulnerabilityDetailPage({ params }: { params: Promise<{ 
                             }
                         />
                         <FieldRow label="Severity" value={vuln.severity ?? '—'} />
+                        <FieldRow
+                            label="EPSS"
+                            value={
+                                vuln.epssScore != null
+                                    ? (
+                                        <span className={cn('font-mono tabular-nums', vuln.epssScore >= 0.5 ? 'text-sev-high' : 'text-text-2')}>
+                                            {(vuln.epssScore * 100).toFixed(1)}%
+                                            {vuln.epssPercentile != null && (
+                                                <span className="text-text-4 ml-2">· {(vuln.epssPercentile * 100).toFixed(0)}th pctile</span>
+                                            )}
+                                        </span>
+                                    )
+                                    : '—'
+                            }
+                        />
                         <FieldRow label="Exploited" value={vuln.isExploited ? 'Yes — listed in CISA KEV' : 'Unknown'} />
                         <FieldRow label="Published" value={vuln.publishedDate ? new Date(vuln.publishedDate).toLocaleDateString() : '—'} />
                         <FieldRow label="Last modified" value={vuln.lastModified ? relTime(vuln.lastModified) : '—'} />
