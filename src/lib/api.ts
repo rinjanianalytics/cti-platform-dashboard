@@ -1826,3 +1826,106 @@ export const ttps = {
     },
 };
 
+// =============================================================================
+// Dark-web monitoring — Ahmia indexed search (Phase 5 #4)
+//
+// Honest scope: as of 2026-06-09 the Ahmia HTML scraper is broken-by-
+// upstream — Ahmia moved results to client-side JS rendering and their
+// /search/atom feed returns 404. The watchterm CRUD + table layer ship
+// regardless (so an alternative dark-web source can slot in later
+// without UI work), but `scan()` currently returns zero results.
+// =============================================================================
+
+export interface DarkWebWatchterm {
+    id: string;
+    term: string;
+    kind: string | null;
+    owner: string | null;
+    enabled: boolean;
+    lastSearchedAt: string | null;
+    createdBy: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export type DarkWebSource = 'ahmia';
+export type DarkWebMentionStatus = 'new' | 'triaging' | 'escalated' | 'benign' | 'blocked';
+
+export interface DarkWebMention {
+    id: string;
+    watchtermId: string;
+    source: DarkWebSource;
+    title: string;
+    onionUrl: string;
+    snippet: string | null;
+    score: number;
+    status: DarkWebMentionStatus;
+    firstSeenAt: string;
+    lastSeenAt: string;
+    notes: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface DarkWebMentionListResponse {
+    items: DarkWebMention[];
+    pagination: { page: number; pageSize: number; total: number };
+}
+
+export const darkWeb = {
+    listWatchterms(): Promise<DarkWebWatchterm[]> {
+        return request('/v1/dark-web/watchterms');
+    },
+    getWatchterm(id: string): Promise<DarkWebWatchterm & { recentMentions: DarkWebMention[] }> {
+        return request(`/v1/dark-web/watchterms/${encodeURIComponent(id)}`);
+    },
+    createWatchterm(body: {
+        term: string;
+        kind?: string;
+        owner?: string;
+        enabled?: boolean;
+    }): Promise<DarkWebWatchterm> {
+        return request('/v1/dark-web/watchterms', { method: 'POST', body });
+    },
+    updateWatchterm(id: string, body: {
+        kind?: string | null;
+        owner?: string | null;
+        enabled?: boolean;
+    }): Promise<DarkWebWatchterm> {
+        return request(`/v1/dark-web/watchterms/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+    },
+    deleteWatchterm(id: string): Promise<{ id: string; deleted: true }> {
+        return request(`/v1/dark-web/watchterms/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    },
+    /** Ad-hoc per-term scan. Currently returns 0 results — Ahmia HTML scraper broken upstream. */
+    scanOne(id: string): Promise<{ term: string; results: number; created: number; updated: number }> {
+        return request(`/v1/dark-web/watchterms/${encodeURIComponent(id)}/scan`, { method: 'POST' });
+    },
+    /** Sweep every enabled term. */
+    scanAll(): Promise<{ termsScanned: number; resultsTotal: number; mentionsCreated: number; mentionsUpdated: number; durationMs: number }> {
+        return request('/v1/dark-web/scan', { method: 'POST' });
+    },
+    listMentions(opts: {
+        page?: number;
+        pageSize?: number;
+        watchtermId?: string;
+        status?: DarkWebMentionStatus;
+        minScore?: number;
+    } = {}): Promise<DarkWebMentionListResponse> {
+        const qs = new URLSearchParams();
+        if (opts.page) qs.set('page', String(opts.page));
+        if (opts.pageSize) qs.set('pageSize', String(opts.pageSize));
+        if (opts.watchtermId) qs.set('watchtermId', opts.watchtermId);
+        if (opts.status) qs.set('status', opts.status);
+        if (typeof opts.minScore === 'number') qs.set('minScore', String(opts.minScore));
+        const query = qs.toString();
+        return request(`/v1/dark-web/mentions${query ? `?${query}` : ''}`);
+    },
+    updateMention(id: string, body: {
+        status?: DarkWebMentionStatus;
+        notes?: string;
+    }): Promise<DarkWebMention> {
+        return request(`/v1/dark-web/mentions/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+    },
+};
+

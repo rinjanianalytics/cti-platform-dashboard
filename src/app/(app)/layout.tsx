@@ -14,7 +14,7 @@ import {
     LayoutDashboard, Database, Radar, Shield, Users, Network,
     ServerCog, BookOpen, Workflow, Boxes, CalendarClock,
     UsersRound, ScrollText, ChevronLeft, ChevronRight,
-    Globe2, AlertTriangle, FileCode2, AtSign, KeyRound, Activity,
+    Globe2, AlertTriangle, FileCode2, AtSign, KeyRound, Activity, Spade, EyeOff,
 } from 'lucide-react';
 import { SearchPalette } from '@/components/search-palette';
 import { MobileBottomNav } from '@/components/mobile-bottom-nav';
@@ -72,11 +72,13 @@ const NAV_GROUPS: Array<{ heading: string; items: NavItem[] }> = [
     {
         heading: 'Surface',
         items: [
-            { href: '/brand/domains',    label: 'Brand watchlist',  icon: Globe2         },
-            { href: '/brand/alerts',     label: 'Brand alerts',     icon: AlertTriangle  },
-            { href: '/paste/watchterms', label: 'Paste watchterms', icon: AtSign         },
-            { href: '/paste/mentions',   label: 'Paste mentions',   icon: FileCode2      },
-            { href: '/data-breaches',    label: 'Data breaches',    icon: KeyRound       },
+            { href: '/brand/domains',       label: 'Brand watchlist',   icon: Globe2         },
+            { href: '/brand/alerts',        label: 'Brand alerts',      icon: AlertTriangle  },
+            { href: '/paste/watchterms',    label: 'Paste watchterms',  icon: AtSign         },
+            { href: '/paste/mentions',      label: 'Paste mentions',    icon: FileCode2      },
+            { href: '/data-breaches',       label: 'Data breaches',     icon: KeyRound       },
+            { href: '/dark-web/watchterms', label: 'Dark-web terms',    icon: EyeOff         },
+            { href: '/dark-web/mentions',   label: 'Dark-web mentions', icon: Spade          },
         ],
     },
     {
