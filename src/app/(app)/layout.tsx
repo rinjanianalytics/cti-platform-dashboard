@@ -14,7 +14,7 @@ import {
     LayoutDashboard, Database, Radar, Shield, Users, Network,
     ServerCog, BookOpen, Workflow, Boxes, CalendarClock,
     UsersRound, ScrollText, ChevronLeft, ChevronRight,
-    Globe2, AlertTriangle, FileCode2, AtSign,
+    Globe2, AlertTriangle, FileCode2, AtSign, KeyRound, Activity,
 } from 'lucide-react';
 import { SearchPalette } from '@/components/search-palette';
 import { MobileBottomNav } from '@/components/mobile-bottom-nav';
@@ -62,10 +62,11 @@ const NAV_GROUPS: Array<{ heading: string; items: NavItem[] }> = [
     {
         heading: 'Investigate',
         items: [
-            { href: '/iocs',            label: 'Indicators',      icon: Radar   },
-            { href: '/vulnerabilities', label: 'Vulnerabilities', icon: Shield  },
-            { href: '/actors',          label: 'Threat actors',   icon: Users   },
-            { href: '/graph',           label: 'Graph',           icon: Network },
+            { href: '/iocs',            label: 'Indicators',      icon: Radar    },
+            { href: '/vulnerabilities', label: 'Vulnerabilities', icon: Shield   },
+            { href: '/actors',          label: 'Threat actors',   icon: Users    },
+            { href: '/ttp-changes',     label: 'TTP changelog',   icon: Activity },
+            { href: '/graph',           label: 'Graph',           icon: Network  },
         ],
     },
     {
@@ -75,6 +76,7 @@ const NAV_GROUPS: Array<{ heading: string; items: NavItem[] }> = [
             { href: '/brand/alerts',     label: 'Brand alerts',     icon: AlertTriangle  },
             { href: '/paste/watchterms', label: 'Paste watchterms', icon: AtSign         },
             { href: '/paste/mentions',   label: 'Paste mentions',   icon: FileCode2      },
+            { href: '/data-breaches',    label: 'Data breaches',    icon: KeyRound       },
         ],
     },
     {

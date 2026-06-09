@@ -1708,3 +1708,121 @@ export const paste = {
     },
 };
 
+// =============================================================================
+// HIBP breach catalog (Phase 5 #3) — read-only
+// =============================================================================
+
+export interface DataBreach {
+    id: string;
+    name: string;
+    title: string;
+    domain: string | null;
+    breachDate: string | null;
+    addedDate: string | null;
+    modifiedDate: string | null;
+    pwnCount: number;
+    dataClasses?: string[];
+    description?: string | null;
+    isVerified: boolean;
+    isFabricated?: boolean;
+    isSensitive: boolean;
+    isRetired: boolean;
+    isSpamList?: boolean;
+    logoPath: string | null;
+}
+
+export interface DataBreachListResponse {
+    items: DataBreach[];
+    pagination: { page: number; pageSize: number; total: number };
+}
+
+export const breaches = {
+    list(opts: {
+        page?: number;
+        pageSize?: number;
+        domain?: string;
+        name?: string;
+        addedSince?: string;
+        breachSince?: string;
+        includeRetired?: boolean;
+        includeSpamList?: boolean;
+        includeFabricated?: boolean;
+    } = {}): Promise<DataBreachListResponse> {
+        const qs = new URLSearchParams();
+        if (opts.page) qs.set('page', String(opts.page));
+        if (opts.pageSize) qs.set('pageSize', String(opts.pageSize));
+        if (opts.domain) qs.set('domain', opts.domain);
+        if (opts.name) qs.set('name', opts.name);
+        if (opts.addedSince) qs.set('addedSince', opts.addedSince);
+        if (opts.breachSince) qs.set('breachSince', opts.breachSince);
+        if (opts.includeRetired) qs.set('includeRetired', 'true');
+        if (opts.includeSpamList) qs.set('includeSpamList', 'true');
+        if (opts.includeFabricated) qs.set('includeFabricated', 'true');
+        const query = qs.toString();
+        return request(`/v1/data-breaches${query ? `?${query}` : ''}`);
+    },
+    get(name: string): Promise<DataBreach> {
+        return request(`/v1/data-breaches/${encodeURIComponent(name)}`);
+    },
+    /** Admin-only ad-hoc resync. */
+    sync(): Promise<{ totalEntries: number; added: number; updated: number; errors: string[] }> {
+        return request('/v1/data-breaches/sync', { method: 'POST' });
+    },
+};
+
+// =============================================================================
+// Threat-actor TTP changelog (Phase 5 #2) — read-only
+// =============================================================================
+
+export type TtpChangeType = 'added' | 'removed';
+
+export interface ActorTtpChange {
+    id: string;
+    actorId: string;
+    techniqueId: string;
+    changeType: TtpChangeType;
+    detectedAt: string;
+    note: string | null;
+}
+
+export interface ActorTtpChangeListResponse {
+    items: ActorTtpChange[];
+    pagination: { page: number; pageSize: number; total: number };
+}
+
+export const ttps = {
+    list(opts: {
+        page?: number;
+        pageSize?: number;
+        actorId?: string;
+        techniqueId?: string;
+        changeType?: TtpChangeType;
+        /** ISO-8601 cutoff; only entries with detected_at >= since are returned. */
+        since?: string;
+    } = {}): Promise<ActorTtpChangeListResponse> {
+        const qs = new URLSearchParams();
+        if (opts.page) qs.set('page', String(opts.page));
+        if (opts.pageSize) qs.set('pageSize', String(opts.pageSize));
+        if (opts.actorId) qs.set('actorId', opts.actorId);
+        if (opts.techniqueId) qs.set('techniqueId', opts.techniqueId);
+        if (opts.changeType) qs.set('changeType', opts.changeType);
+        if (opts.since) qs.set('since', opts.since);
+        const query = qs.toString();
+        return request(`/v1/ttp-changes${query ? `?${query}` : ''}`);
+    },
+    forActor(actorId: string, opts: {
+        page?: number;
+        pageSize?: number;
+        changeType?: TtpChangeType;
+        since?: string;
+    } = {}): Promise<ActorTtpChangeListResponse> {
+        const qs = new URLSearchParams();
+        if (opts.page) qs.set('page', String(opts.page));
+        if (opts.pageSize) qs.set('pageSize', String(opts.pageSize));
+        if (opts.changeType) qs.set('changeType', opts.changeType);
+        if (opts.since) qs.set('since', opts.since);
+        const query = qs.toString();
+        return request(`/v1/actors/${encodeURIComponent(actorId)}/ttp-changes${query ? `?${query}` : ''}`);
+    },
+};
+
