@@ -14,7 +14,7 @@ import {
     LayoutDashboard, Database, Radar, Shield, Users, Network,
     ServerCog, BookOpen, Workflow, Boxes, CalendarClock,
     UsersRound, ScrollText, ChevronLeft, ChevronRight,
-    Globe2, AlertTriangle,
+    Globe2, AlertTriangle, FileCode2, AtSign,
 } from 'lucide-react';
 import { SearchPalette } from '@/components/search-palette';
 import { MobileBottomNav } from '@/components/mobile-bottom-nav';
@@ -71,8 +71,10 @@ const NAV_GROUPS: Array<{ heading: string; items: NavItem[] }> = [
     {
         heading: 'Surface',
         items: [
-            { href: '/brand/domains', label: 'Brand watchlist', icon: Globe2         },
-            { href: '/brand/alerts',  label: 'Brand alerts',    icon: AlertTriangle  },
+            { href: '/brand/domains',    label: 'Brand watchlist',  icon: Globe2         },
+            { href: '/brand/alerts',     label: 'Brand alerts',     icon: AlertTriangle  },
+            { href: '/paste/watchterms', label: 'Paste watchterms', icon: AtSign         },
+            { href: '/paste/mentions',   label: 'Paste mentions',   icon: FileCode2      },
         ],
     },
     {
