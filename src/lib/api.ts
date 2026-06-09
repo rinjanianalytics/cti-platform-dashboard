@@ -1480,3 +1480,125 @@ export const graphApi = {
     },
 };
 
+// =============================================================================
+// Brand / typo-squat monitoring (Phase 5 #1)
+// =============================================================================
+
+export interface MonitoredDomain {
+    id: string;
+    apexDomain: string;
+    label: string | null;
+    owner: string | null;
+    enabled: boolean;
+    lastSweptAt: string | null;
+    createdBy: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export type BrandAlertDnsState = 'active' | 'mx_only' | 'nx' | 'error';
+export type BrandAlertStatus = 'new' | 'triaging' | 'escalated' | 'benign' | 'blocked';
+export type BrandAlgorithm =
+    | 'bitsquat' | 'homoglyph' | 'insertion' | 'omission' | 'substitution'
+    | 'transposition' | 'vowel-swap' | 'hyphenation' | 'subdomain';
+
+export interface BrandAlert {
+    id: string;
+    monitoredDomainId: string;
+    permutation: string;
+    algorithm: BrandAlgorithm;
+    dnsState: BrandAlertDnsState;
+    ipAddresses: string | null;
+    score: number;
+    status: BrandAlertStatus;
+    firstSeenAt: string;
+    lastCheckedAt: string;
+    notes: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface BrandSweepSummary {
+    monitoredDomainId: string;
+    apex: string;
+    permutationsGenerated: number;
+    permutationsChecked: number;
+    hitsCreated: number;
+    hitsUpdated: number;
+    durationMs: number;
+}
+
+export interface BrandAlertListResponse {
+    items: BrandAlert[];
+    pagination: { page: number; pageSize: number; total: number };
+}
+
+export const brand = {
+    /** Watchlist CRUD. */
+    listDomains(): Promise<MonitoredDomain[]> {
+        return request('/v1/brand/domains');
+    },
+    getDomain(id: string): Promise<MonitoredDomain & { recentAlerts: BrandAlert[] }> {
+        return request(`/v1/brand/domains/${encodeURIComponent(id)}`);
+    },
+    createDomain(body: {
+        apexDomain: string;
+        label?: string;
+        owner?: string;
+        enabled?: boolean;
+    }): Promise<MonitoredDomain> {
+        return request('/v1/brand/domains', { method: 'POST', body });
+    },
+    updateDomain(id: string, body: {
+        label?: string | null;
+        owner?: string | null;
+        enabled?: boolean;
+    }): Promise<MonitoredDomain> {
+        return request(`/v1/brand/domains/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+    },
+    deleteDomain(id: string): Promise<{ id: string; deleted: true }> {
+        return request(`/v1/brand/domains/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    },
+
+    /** Sweep one apex now (don't wait for the 6h cron). */
+    sweep(id: string): Promise<BrandSweepSummary> {
+        return request(`/v1/brand/domains/${encodeURIComponent(id)}/sweep`, { method: 'POST' });
+    },
+    /** Sweep all enabled apexes. */
+    sweepAll(): Promise<{
+        domainsSwept: number;
+        totalPermutations: number;
+        totalHitsCreated: number;
+        totalHitsUpdated: number;
+        summaries: BrandSweepSummary[];
+    }> {
+        return request('/v1/brand/sweep', { method: 'POST' });
+    },
+
+    /** Triage queue. */
+    listAlerts(opts: {
+        page?: number;
+        pageSize?: number;
+        monitoredDomainId?: string;
+        status?: BrandAlertStatus;
+        dnsState?: BrandAlertDnsState;
+        minScore?: number;
+    } = {}): Promise<BrandAlertListResponse> {
+        const qs = new URLSearchParams();
+        if (opts.page) qs.set('page', String(opts.page));
+        if (opts.pageSize) qs.set('pageSize', String(opts.pageSize));
+        if (opts.monitoredDomainId) qs.set('monitoredDomainId', opts.monitoredDomainId);
+        if (opts.status) qs.set('status', opts.status);
+        if (opts.dnsState) qs.set('dnsState', opts.dnsState);
+        if (typeof opts.minScore === 'number') qs.set('minScore', String(opts.minScore));
+        const query = qs.toString();
+        return request(`/v1/brand/alerts${query ? `?${query}` : ''}`);
+    },
+    updateAlert(id: string, body: {
+        status?: BrandAlertStatus;
+        notes?: string;
+    }): Promise<BrandAlert> {
+        return request(`/v1/brand/alerts/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+    },
+};
+

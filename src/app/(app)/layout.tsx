@@ -14,6 +14,7 @@ import {
     LayoutDashboard, Database, Radar, Shield, Users, Network,
     ServerCog, BookOpen, Workflow, Boxes, CalendarClock,
     UsersRound, ScrollText, ChevronLeft, ChevronRight,
+    Globe2, AlertTriangle,
 } from 'lucide-react';
 import { SearchPalette } from '@/components/search-palette';
 import { MobileBottomNav } from '@/components/mobile-bottom-nav';
@@ -65,6 +66,13 @@ const NAV_GROUPS: Array<{ heading: string; items: NavItem[] }> = [
             { href: '/vulnerabilities', label: 'Vulnerabilities', icon: Shield  },
             { href: '/actors',          label: 'Threat actors',   icon: Users   },
             { href: '/graph',           label: 'Graph',           icon: Network },
+        ],
+    },
+    {
+        heading: 'Surface',
+        items: [
+            { href: '/brand/domains', label: 'Brand watchlist', icon: Globe2         },
+            { href: '/brand/alerts',  label: 'Brand alerts',    icon: AlertTriangle  },
         ],
     },
     {
