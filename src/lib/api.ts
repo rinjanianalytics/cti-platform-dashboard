@@ -1602,3 +1602,109 @@ export const brand = {
     },
 };
 
+// =============================================================================
+// Paste-site monitoring — GitHub Gist firehose (Phase 5 #5)
+// =============================================================================
+
+export interface PasteWatchterm {
+    id: string;
+    term: string;
+    kind: string | null;
+    owner: string | null;
+    enabled: boolean;
+    lastSearchedAt: string | null;
+    createdBy: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export type PasteSource = 'github_gist';
+export type PasteMentionStatus = 'new' | 'triaging' | 'escalated' | 'benign' | 'blocked';
+
+export interface PasteMention {
+    id: string;
+    watchtermId: string;
+    source: PasteSource;
+    author: string | null;
+    filename: string | null;
+    title: string | null;
+    externalUrl: string;
+    externalId: string;
+    snippet: string | null;
+    score: number;
+    status: PasteMentionStatus;
+    firstSeenAt: string;
+    lastSeenAt: string;
+    notes: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface PasteMentionListResponse {
+    items: PasteMention[];
+    pagination: { page: number; pageSize: number; total: number };
+}
+
+export interface PasteScanSummary {
+    pagesFetched: number;
+    gistsScanned: number;
+    watchtermsActive: number;
+    matchesCreated: number;
+    matchesUpdated: number;
+    durationMs: number;
+    error?: string;
+}
+
+export const paste = {
+    listWatchterms(): Promise<PasteWatchterm[]> {
+        return request('/v1/paste/watchterms');
+    },
+    getWatchterm(id: string): Promise<PasteWatchterm & { recentMentions: PasteMention[] }> {
+        return request(`/v1/paste/watchterms/${encodeURIComponent(id)}`);
+    },
+    createWatchterm(body: {
+        term: string;
+        kind?: string;
+        owner?: string;
+        enabled?: boolean;
+    }): Promise<PasteWatchterm> {
+        return request('/v1/paste/watchterms', { method: 'POST', body });
+    },
+    updateWatchterm(id: string, body: {
+        kind?: string | null;
+        owner?: string | null;
+        enabled?: boolean;
+    }): Promise<PasteWatchterm> {
+        return request(`/v1/paste/watchterms/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+    },
+    deleteWatchterm(id: string): Promise<{ id: string; deleted: true }> {
+        return request(`/v1/paste/watchterms/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    },
+    /** Trigger an ad-hoc Gist firehose scan across every enabled watchterm. */
+    scan(): Promise<PasteScanSummary> {
+        return request('/v1/paste/scan', { method: 'POST' });
+    },
+    listMentions(opts: {
+        page?: number;
+        pageSize?: number;
+        watchtermId?: string;
+        status?: PasteMentionStatus;
+        minScore?: number;
+    } = {}): Promise<PasteMentionListResponse> {
+        const qs = new URLSearchParams();
+        if (opts.page) qs.set('page', String(opts.page));
+        if (opts.pageSize) qs.set('pageSize', String(opts.pageSize));
+        if (opts.watchtermId) qs.set('watchtermId', opts.watchtermId);
+        if (opts.status) qs.set('status', opts.status);
+        if (typeof opts.minScore === 'number') qs.set('minScore', String(opts.minScore));
+        const query = qs.toString();
+        return request(`/v1/paste/mentions${query ? `?${query}` : ''}`);
+    },
+    updateMention(id: string, body: {
+        status?: PasteMentionStatus;
+        notes?: string;
+    }): Promise<PasteMention> {
+        return request(`/v1/paste/mentions/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+    },
+};
+
