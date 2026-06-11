@@ -244,7 +244,7 @@ export default function CommandPage() {
                     types={landscape?.iocTypeDistribution ?? []}
                     total={landscape?.iocs.total ?? 0}
                 />
-                <AttackHeatmap tactics={coverage?.tactics ?? []} />
+                <AttackHeatmap tactics={coverage?.tactics ?? []} lastSyncedAt={coverage?.lastSyncedAt} />
                 <TrendingTagsPanel tags={trending ?? []} />
             </div>
 
@@ -576,16 +576,24 @@ function IndicatorTypesPanel({
 
 function AttackHeatmap({
     tactics,
+    lastSyncedAt,
 }: {
     tactics: Array<{ mitreId: string; name: string; shortName: string; techniqueCount: number }>;
+    lastSyncedAt?: string | null;
 }) {
     const max = tactics.reduce((m, t) => Math.max(m, t.techniqueCount), 1);
+    // The MITRE upstream rarely shifts (weekly cadence), so "synced 6h ago"
+    // reads as healthy, "12d ago" reads as stale. Without this line operators
+    // had no way to tell whether the heatmap was live data or a baked snapshot.
+    const sub = lastSyncedAt
+        ? `${tactics.length} tactics · synced ${relTime(lastSyncedAt)}`
+        : `${tactics.length} tactics tracked`;
     return (
         <div className="panel panel-pad">
             <PanelHead
                 icon={<GridIcon className="size-4" />}
                 title="ATT&CK coverage"
-                sub={`${tactics.length} tactics tracked`}
+                sub={sub}
             />
             <div className="mt-3 grid grid-cols-3 gap-1.75">
                 {tactics.length === 0 ? (

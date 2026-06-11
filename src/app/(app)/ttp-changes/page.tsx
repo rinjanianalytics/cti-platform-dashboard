@@ -99,29 +99,56 @@ export default function TtpChangesPage() {
         },
         {
             id: 'actorId',
-            header: 'Actor (STIX id)',
+            header: 'Actor',
             sortable: true,
-            cell: r => (
-                <span
-                    className="font-mono text-[12px] truncate block max-w-[40ch]"
-                    title={r.actorId}
-                >
-                    {r.actorId}
-                </span>
-            ),
+            cell: r => r.actorName
+                ? (
+                    <span
+                        className="text-[13px] truncate block max-w-[40ch]"
+                        // STIX id + first 4 aliases in the tooltip — operators
+                        // sometimes recognise an alias before the canonical name.
+                        title={[
+                            r.actorId,
+                            r.actorAliases?.length
+                                ? `aka ${r.actorAliases.slice(0, 4).join(', ')}${r.actorAliases.length > 4 ? '…' : ''}`
+                                : null,
+                        ].filter(Boolean).join('\n')}
+                    >
+                        {r.actorName}
+                    </span>
+                )
+                : (
+                    <span
+                        className="font-mono text-[12px] text-text-3 truncate block max-w-[40ch]"
+                        title={r.actorId}
+                    >
+                        {r.actorId}
+                    </span>
+                ),
         },
         {
             id: 'techniqueId',
-            header: 'Technique (STIX id)',
+            header: 'Technique',
             sortable: true,
-            cell: r => (
-                <span
-                    className="font-mono text-[12px] truncate block max-w-[40ch]"
-                    title={r.techniqueId}
-                >
-                    {r.techniqueId}
-                </span>
-            ),
+            cell: r => r.techniqueName
+                ? (
+                    <div className="min-w-0 max-w-[44ch]" title={r.techniqueId}>
+                        <div className="text-[13px] truncate">{r.techniqueName}</div>
+                        {r.techniqueMitreId && (
+                            <div className="font-mono text-[10.5px] text-text-3 leading-tight">
+                                {r.techniqueMitreId}
+                            </div>
+                        )}
+                    </div>
+                )
+                : (
+                    <span
+                        className="font-mono text-[12px] text-text-3 truncate block max-w-[40ch]"
+                        title={r.techniqueId}
+                    >
+                        {r.techniqueId}
+                    </span>
+                ),
         },
         {
             id: 'detectedAt',
