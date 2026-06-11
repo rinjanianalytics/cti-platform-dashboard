@@ -806,6 +806,15 @@ export const platform = {
     async mitreCoverage(): Promise<{
         tactics: Array<{ mitreId: string; name: string; shortName: string; techniqueCount: number }>;
         totalTechniques: number;
+        /**
+         * ISO timestamp of the most recent MITRE sync (MAX(updated_at) over
+         * the techniques table — the sync upsert bumps updated_at on every
+         * conflict). Used by the ATT&CK coverage card to render a "Last
+         * synced 3h ago" sub-line so operators can tell at a glance whether
+         * the heatmap reflects current upstream state. Null if the sync has
+         * never run on this database.
+         */
+        lastSyncedAt: string | null;
     }> {
         return request('/v1/mitre/coverage');
     },
@@ -1783,6 +1792,17 @@ export interface ActorTtpChange {
     changeType: TtpChangeType;
     detectedAt: string;
     note: string | null;
+    /**
+     * Resolved via LEFT JOIN against threat_actors.real_stix_id. Null when
+     * the catalog row hasn't caught up to a relationship's actor reference
+     * (rare — usually a freshly-ingested STIX object whose intrusion-set
+     * row hasn't been upserted yet). UI falls back to the raw actorId.
+     */
+    actorName: string | null;
+    actorAliases: string[] | null;
+    /** Human-readable MITRE id (`T1059.001`) from the techniques catalog. */
+    techniqueMitreId: string | null;
+    techniqueName: string | null;
 }
 
 export interface ActorTtpChangeListResponse {
