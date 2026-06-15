@@ -230,6 +230,7 @@ export default function NewConnectorPage() {
                             <SelectContent>
                                 <SelectItem value="json">JSON</SelectItem>
                                 <SelectItem value="csv">CSV</SelectItem>
+                                <SelectItem value="text">Text (line-per-record)</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -242,7 +243,8 @@ export default function NewConnectorPage() {
                     <CardTitle className="text-base">2 · Sample payload</CardTitle>
                     <CardDescription>
                         Paste a real response from the upstream feed. The engine will use this to learn the structure
-                        {format === 'json' && ' (and the records-path tells us where the array lives)'}.
+                        {format === 'json' && ' (and the records-path tells us where the array lives)'}
+                        {format === 'text' && ' (each non-blank, non-comment line becomes one record under the field `line`)'}.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -263,7 +265,9 @@ export default function NewConnectorPage() {
                             id="sample"
                             placeholder={format === 'json'
                                 ? '{ "data": [{ "ioc": "1.2.3.4", "type": "ip", ... }] }'
-                                : 'header1,header2,header3\nvalue1,value2,value3'}
+                                : format === 'csv'
+                                ? 'header1,header2,header3\nvalue1,value2,value3'
+                                : '# optional comment\nhttp://phish.example/login\nhttp://another.example/path'}
                             value={sample}
                             onChange={(e) => setSample(e.target.value)}
                             className="font-mono text-xs min-h-50"
