@@ -15,6 +15,7 @@ import {
     ServerCog, BookOpen, Workflow, Boxes, CalendarClock,
     UsersRound, ScrollText, ChevronLeft, ChevronRight,
     Globe2, AlertTriangle, FileCode2, AtSign, KeyRound, Activity, Spade, EyeOff,
+    Cable,
 } from 'lucide-react';
 import { SearchPalette } from '@/components/search-palette';
 import { MobileBottomNav } from '@/components/mobile-bottom-nav';
@@ -97,8 +98,9 @@ const NAV_GROUPS: Array<{ heading: string; items: NavItem[] }> = [
     {
         heading: 'Admin',
         items: [
-            { href: '/admin/feeds',     label: 'Feed config', icon: Database,      roles: ['admin', 'auditor'] },
-            { href: '/admin/schedules', label: 'Schedules',   icon: CalendarClock, roles: ['admin'] },
+            { href: '/admin/feeds',      label: 'Feed config', icon: Database,      roles: ['admin', 'auditor'] },
+            { href: '/admin/connectors', label: 'Connectors',  icon: Cable,         roles: ['admin', 'analyst', 'developer'] },
+            { href: '/admin/schedules',  label: 'Schedules',   icon: CalendarClock, roles: ['admin'] },
             { href: '/admin/users',     label: 'Users',       icon: UsersRound,    roles: ['admin'] },
             { href: '/admin/audit',     label: 'Audit log',   icon: ScrollText,    roles: ['admin', 'auditor'] },
         ],
