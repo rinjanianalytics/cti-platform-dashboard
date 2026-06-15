@@ -1949,3 +1949,122 @@ export const darkWeb = {
     },
 };
 
+// ============================================================================
+// Feed Connectors — declarative feed-engine manifest CRUD + builder support
+// ============================================================================
+
+export type ConnectorEntity =
+    | 'ioc' | 'vulnerability' | 'threat_actor' | 'malware' | 'campaign'
+    | 'course_of_action' | 'infrastructure' | 'technique' | 'tool';
+
+export type ConnectorFormat = 'json' | 'csv';
+
+export interface ConnectorRow {
+    id: string;
+    source: string;
+    version: number;
+    entity: ConnectorEntity;
+    manifest: Record<string, unknown>;
+    isActive: boolean;
+    createdBy: string;
+    createdAt: string;
+    lastValidatedAt: string | null;
+    lastValidationErrors: unknown;
+}
+
+export interface SuggestResult {
+    status: 'ok' | 'couldnt_map';
+    manifest: Record<string, unknown>;
+    dryRun?: {
+        read: number;
+        ok: number;
+        failed: number;
+        errors: Array<{ index: number; reason: string }>;
+    };
+    reason?: string;
+    llmMeta?: { provider: string; model: string; latencyMs: number; tokensUsed?: number };
+}
+
+export interface PreviewResult {
+    ok: boolean;
+    records: Record<string, unknown>[];
+    fields: string[];
+    totalCount: number;
+    reason?: string;
+}
+
+export interface TestResult {
+    ok: boolean;
+    dryRun?: {
+        read: number;
+        ok: number;
+        failed: number;
+        errors: Array<{ index: number; reason: string }>;
+    };
+    records?: unknown[];
+    validationIssues?: Array<{ path: string; message: string }>;
+    runtimeError?: string;
+}
+
+export const connectors = {
+    async list(filters: {
+        source?: string;
+        entity?: ConnectorEntity;
+        activeOnly?: boolean;
+    } = {}): Promise<{ data: ConnectorRow[]; count: number }> {
+        const qs = new URLSearchParams();
+        if (filters.source) qs.set('source', filters.source);
+        if (filters.entity) qs.set('entity', filters.entity);
+        if (filters.activeOnly !== undefined) qs.set('activeOnly', String(filters.activeOnly));
+        const query = qs.toString();
+        // The route returns `{ success, data: [...], count }` but the request<>
+        // helper extracts data[0]. We want the whole envelope (rows + count) so
+        // we have to ask the helper for the unwrapped shape and rebuild.
+        return request<{ data: ConnectorRow[]; count: number }>(
+            `/v1/connectors${query ? `?${query}` : ''}`,
+        );
+    },
+    async get(id: string): Promise<ConnectorRow> {
+        return request(`/v1/connectors/${encodeURIComponent(id)}`);
+    },
+    async create(body: {
+        source: string;
+        entity: ConnectorEntity;
+        manifest: Record<string, unknown>;
+    }): Promise<ConnectorRow> {
+        return request('/v1/connectors', { method: 'POST', body });
+    },
+    async activate(id: string): Promise<ConnectorRow> {
+        return request(`/v1/connectors/${encodeURIComponent(id)}/activate`, { method: 'POST' });
+    },
+    async deactivate(id: string): Promise<{ id: string; isActive: false }> {
+        return request(`/v1/connectors/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    },
+    async suggest(body: {
+        sample: string;
+        format: ConnectorFormat;
+        entity: ConnectorEntity;
+        sourceName: string;
+        recordsPathHint?: string;
+        provider?: 'gemini' | 'openrouter' | 'ollama';
+    }): Promise<SuggestResult> {
+        return request('/v1/connectors/suggest', { method: 'POST', body });
+    },
+    async preview(body: {
+        sample: string;
+        format: ConnectorFormat;
+        recordsPath?: string;
+        csv?: { delimiter: string; hasHeader: boolean };
+        limit?: number;
+    }): Promise<PreviewResult> {
+        return request('/v1/connectors/preview', { method: 'POST', body });
+    },
+    async test(body: {
+        sample: string;
+        manifest: Record<string, unknown>;
+        limit?: number;
+    }): Promise<TestResult> {
+        return request('/v1/connectors/test', { method: 'POST', body });
+    },
+};
+
