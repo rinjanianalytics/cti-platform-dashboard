@@ -13,6 +13,7 @@ import {
     Search, Sparkles, Loader2,
     LayoutDashboard, Database, Radar, Shield, Users, Network, ServerCog, BookOpen,
     Workflow, CalendarClock, UsersRound, ScrollText, Bell, RefreshCcw, Sliders,
+    Cable,
     type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -68,6 +69,7 @@ const NAV_ITEMS: NavRowItem[] = [
     { href: '/admin/runbook',       label: 'Runbook',        group: 'Operate',     icon: BookOpen },
     { href: '/playbooks',           label: 'Playbooks',      group: 'Operate',     icon: Workflow,   keywords: ['automation'] },
     { href: '/admin/feeds',         label: 'Feed config',    group: 'Admin',       icon: Database },
+    { href: '/admin/connectors',    label: 'Connectors',     group: 'Admin',       icon: Cable, keywords: ['feed engine', 'manifest', 'declarative'] },
     { href: '/admin/schedules',     label: 'Schedules',      group: 'Admin',       icon: CalendarClock, keywords: ['cron'] },
     { href: '/admin/users',         label: 'Users',          group: 'Admin',       icon: UsersRound },
     { href: '/admin/audit',         label: 'Audit log',      group: 'Admin',       icon: ScrollText, keywords: ['audit', 'log'] },
