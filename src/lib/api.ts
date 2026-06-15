@@ -1957,7 +1957,7 @@ export type ConnectorEntity =
     | 'ioc' | 'vulnerability' | 'threat_actor' | 'malware' | 'campaign'
     | 'course_of_action' | 'infrastructure' | 'technique' | 'tool';
 
-export type ConnectorFormat = 'json' | 'csv';
+export type ConnectorFormat = 'json' | 'csv' | 'text';
 
 export interface ConnectorRow {
     id: string;
@@ -2055,6 +2055,7 @@ export const connectors = {
         format: ConnectorFormat;
         recordsPath?: string;
         csv?: { delimiter: string; hasHeader: boolean };
+        text?: { commentPrefix: string };
         limit?: number;
     }): Promise<PreviewResult> {
         return request('/v1/connectors/preview', { method: 'POST', body });
