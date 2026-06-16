@@ -91,7 +91,7 @@ export default function HuntPage() {
     }
 
     return (
-        <div className="mx-auto max-w-3xl space-y-6">
+        <div className="min-w-0 space-y-6">
             <div>
                 <h1 className="text-xl font-semibold">Hunt</h1>
                 <p className="text-sm text-muted-foreground">
