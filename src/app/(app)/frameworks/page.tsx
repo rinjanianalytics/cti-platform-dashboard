@@ -19,6 +19,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+import { CoverageHeatmap, type CoverageCell } from '@/components/cc/coverage-heatmap';
+import { Grid as GridIcon } from 'lucide-react';
 
 function statusTone(s: string | null): 'default' | 'secondary' | 'outline' {
     const v = (s ?? '').toLowerCase();
@@ -30,8 +32,14 @@ function statusTone(s: string | null): 'default' | 'secondary' | 'outline' {
 function FightTab() {
     const [q, setQ] = useState('');
     const { data, isLoading } = useSWR(['fight-techniques', q], () => fight.techniques({ q: q || undefined }));
+    const { data: matrix } = useSWR('fight-matrix', () => fight.matrix());
+    const cells: CoverageCell[] = (matrix?.tactics ?? []).map((t) => ({
+        id: t.mitreId, name: t.name,
+        count: (matrix?.techniques ?? []).filter((x) => (x.tacticIds ?? []).includes(t.mitreId)).length,
+    }));
     return (
         <div className="space-y-3">
+            <CoverageHeatmap title="FiGHT coverage · 5G" sub={`${cells.length} tactics · ${(matrix?.techniques ?? []).length} techniques`} icon={<GridIcon className="size-4" />} cells={cells} />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter 5G techniques (name, FGT id, BLUF)…" className="max-w-md" />
             {isLoading && <Skeleton className="h-64 w-full" />}
             {data && (
@@ -71,8 +79,14 @@ function FightTab() {
 function AtlasTab() {
     const [q, setQ] = useState('');
     const { data, isLoading } = useSWR(['atlas-techniques', q], () => atlas.techniques({ q: q || undefined }));
+    const { data: matrix } = useSWR('atlas-matrix', () => atlas.matrix());
+    const cells: CoverageCell[] = (matrix?.tactics ?? []).map((t) => ({
+        id: t.atlasId, name: t.name,
+        count: (matrix?.techniques ?? []).filter((x) => (x.tacticIds ?? []).includes(t.atlasId)).length,
+    }));
     return (
         <div className="space-y-3">
+            <CoverageHeatmap title="ATLAS coverage · AI" sub={`${cells.length} tactics · ${(matrix?.techniques ?? []).length} techniques`} icon={<GridIcon className="size-4" />} cells={cells} />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter AI techniques (name, AML id)…" className="max-w-md" />
             {isLoading && <Skeleton className="h-64 w-full" />}
             {data && (

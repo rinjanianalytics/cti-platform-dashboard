@@ -2167,6 +2167,12 @@ export interface AtlasTechnique {
     description?: string | null;
 }
 
+/** Matrix payload — tactics + techniques (each technique carries its tactic ids). */
+export interface FrameworkMatrix<Tactic> {
+    tactics: Tactic[];
+    techniques: Array<{ tacticIds?: string[] }>;
+}
+
 export const fight = {
     async techniques(opts: { q?: string; status?: string; segment?: string; limit?: number } = {}): Promise<FightTechnique[]> {
         const p = new URLSearchParams();
@@ -2175,6 +2181,9 @@ export const fight = {
         if (opts.segment) p.set('segment', opts.segment);
         p.set('limit', String(opts.limit ?? 300));
         return request(`/v1/fight/techniques?${p.toString()}`);
+    },
+    async matrix(): Promise<FrameworkMatrix<{ mitreId: string; name: string }>> {
+        return request('/v1/fight/matrix');
     },
     async stats(): Promise<Record<string, unknown>> {
         return request('/v1/fight/stats');
@@ -2188,6 +2197,9 @@ export const atlas = {
         if (opts.maturity) p.set('maturity', opts.maturity);
         p.set('limit', String(opts.limit ?? 300));
         return request(`/v1/atlas/techniques?${p.toString()}`);
+    },
+    async matrix(): Promise<FrameworkMatrix<{ atlasId: string; name: string }>> {
+        return request('/v1/atlas/matrix');
     },
     async stats(): Promise<Record<string, unknown>> {
         return request('/v1/atlas/stats');
