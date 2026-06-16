@@ -28,6 +28,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Markdown } from '@/components/markdown';
 import { toast } from 'sonner';
 
 const EXAMPLES = [
@@ -146,7 +147,7 @@ export default function HuntPage() {
                                 </span>
                             </CardTitle>
                         </CardHeader>
-                        <CardContent className="whitespace-pre-wrap wrap-break-word text-sm">{result.answer}</CardContent>
+                        <CardContent><Markdown>{result.answer}</Markdown></CardContent>
                     </Card>
 
                     {/* Proposed actions (HITL) */}
