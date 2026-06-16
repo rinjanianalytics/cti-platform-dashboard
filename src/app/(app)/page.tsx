@@ -22,9 +22,10 @@ import useSWR from 'swr';
 import Link from 'next/link';
 import { useState } from 'react';
 import {
-    platform, iocs, watch, actors as actorsApi, pulses as pulsesApi,
+    platform, iocs, watch, actors as actorsApi, pulses as pulsesApi, fight, atlas,
     type ThreatActor,
 } from '@/lib/api';
+import { CoverageHeatmap, type CoverageCell } from '@/components/cc/coverage-heatmap';
 import {
     Bolt, ShieldAlert, Crosshair, Grid as GridIcon, Flame, Zap,
     ArrowUp, ArrowDown, ChevronRight,
@@ -108,6 +109,16 @@ export default function CommandPage() {
         { refreshInterval: 60_000 },
     );
     const { data: coverage }  = useSWR('cc:mitre',     () => platform.mitreCoverage());
+    const { data: fightMatrix } = useSWR('cc:fight', () => fight.matrix());
+    const { data: atlasMatrix } = useSWR('cc:atlas', () => atlas.matrix());
+    const fightCells: CoverageCell[] = (fightMatrix?.tactics ?? []).map((t) => ({
+        id: t.mitreId, name: t.name,
+        count: (fightMatrix?.techniques ?? []).filter((x) => (x.tacticIds ?? []).includes(t.mitreId)).length,
+    }));
+    const atlasCells: CoverageCell[] = (atlasMatrix?.tactics ?? []).map((t) => ({
+        id: t.atlasId, name: t.name,
+        count: (atlasMatrix?.techniques ?? []).filter((x) => (x.tacticIds ?? []).includes(t.atlasId)).length,
+    }));
     const { data: actors }    = useSWR(
         ['cc:actors', windowDays] as const,
         ([, days]) => platform.activeActors(6, days),
@@ -246,6 +257,12 @@ export default function CommandPage() {
                 />
                 <AttackHeatmap tactics={coverage?.tactics ?? []} lastSyncedAt={coverage?.lastSyncedAt} />
                 <TrendingTagsPanel tags={trending ?? []} />
+            </div>
+
+            {/* ── Row 3b: FiGHT (5G) + ATLAS (AI) coverage — the differentiator ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <CoverageHeatmap title="FiGHT coverage · 5G" sub={`${fightCells.length} tactics · ${(fightMatrix?.techniques ?? []).length} techniques`} icon={<GridIcon className="size-4" />} cells={fightCells} />
+                <CoverageHeatmap title="ATLAS coverage · AI" sub={`${atlasCells.length} tactics · ${(atlasMatrix?.techniques ?? []).length} techniques`} icon={<GridIcon className="size-4" />} cells={atlasCells} />
             </div>
 
             {/* ── Row 4: Watchlist + Latest pulses ─────────────────────── */}
