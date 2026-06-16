@@ -2205,3 +2205,54 @@ export const atlas = {
         return request('/v1/atlas/stats');
     },
 };
+
+// =============================================================================
+// Telco vertical (B1) + On-chain (AA.6) — the platform's domain entities.
+// =============================================================================
+
+export interface NetworkElement {
+    refId: string; name: string; elementType: string;
+    architectureSegment?: string | null; vendor?: string[]; description?: string | null;
+}
+export interface SignalingInterface {
+    refId: string; name: string; protocol: string;
+    referencePoint?: string | null; specRef?: string | null;
+}
+export interface FraudScheme {
+    refId: string; name: string; schemeType: string;
+    monetization?: string | null; gsmaFsCategories?: string[]; threeGppThreats?: string[];
+}
+export interface Wallet {
+    refId: string; address: string; chain: string;
+    entityLabel?: string | null; entityType?: string | null;
+    confidence: number; attributionSource?: string | null; riskTags?: string[];
+}
+export interface ArkhamAttribution {
+    address: string; chain: string;
+    entityName: string | null; entityType: string | null; entityId: string | null;
+    service: string | null; label: string | null; isUserAddress: boolean; isContract: boolean; unattributed: boolean;
+}
+
+export const telco = {
+    networkElements: (q?: string): Promise<NetworkElement[]> => request(`/v1/telco/network-elements${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+    signalingInterfaces: (q?: string): Promise<SignalingInterface[]> => request(`/v1/telco/signaling-interfaces${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+    fraudSchemes: (q?: string): Promise<FraudScheme[]> => request(`/v1/telco/fraud-schemes${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+};
+
+export const onchain = {
+    wallets: (opts: { q?: string; chain?: string; riskTag?: string } = {}): Promise<Wallet[]> => {
+        const p = new URLSearchParams();
+        if (opts.q) p.set('q', opts.q);
+        if (opts.chain) p.set('chain', opts.chain);
+        if (opts.riskTag) p.set('riskTag', opts.riskTag);
+        const qs = p.toString();
+        return request(`/v1/onchain/wallets${qs ? `?${qs}` : ''}`);
+    },
+    /** Live Arkham attribution via the agent tool (BYO-key). */
+    lookup: async (address: string, chain = 'ethereum'): Promise<ArkhamAttribution> => {
+        const res = await request<{ tool: string; result: ArkhamAttribution }>('/v1/agent/tool/onchain.lookup', {
+            method: 'POST', body: { address, chain },
+        });
+        return res.result;
+    },
+};
