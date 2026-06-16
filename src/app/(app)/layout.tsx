@@ -15,7 +15,7 @@ import {
     ServerCog, BookOpen, Workflow, Boxes, CalendarClock,
     UsersRound, ScrollText, ChevronLeft, ChevronRight,
     Globe2, AlertTriangle, FileCode2, AtSign, KeyRound, Activity, Spade, EyeOff,
-    Cable,
+    Cable, Sparkles,
 } from 'lucide-react';
 import { SearchPalette } from '@/components/search-palette';
 import { MobileBottomNav } from '@/components/mobile-bottom-nav';
@@ -63,6 +63,7 @@ const NAV_GROUPS: Array<{ heading: string; items: NavItem[] }> = [
     {
         heading: 'Investigate',
         items: [
+            { href: '/hunt',            label: 'Hunt',            icon: Sparkles },
             { href: '/iocs',            label: 'Indicators',      icon: Radar    },
             { href: '/vulnerabilities', label: 'Vulnerabilities', icon: Shield   },
             { href: '/actors',          label: 'Threat actors',   icon: Users    },

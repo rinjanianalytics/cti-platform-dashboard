@@ -2069,3 +2069,77 @@ export const connectors = {
     },
 };
 
+
+// =============================================================================
+// Agent — agentic-analytics tool plane (AA.1–AA.6)
+// =============================================================================
+
+export interface AgentTool {
+    name: string;
+    description: string;
+    write: boolean;
+}
+
+export interface AgentStep {
+    thought?: string;
+    tool?: string;
+    args?: unknown;
+    observation: string;
+}
+
+export interface AgentProposedAction {
+    tool: string;
+    args: Record<string, unknown>;
+    summary: string;
+}
+
+export interface AgentRunResult {
+    runId?: string;
+    question: string;
+    answer: string;
+    steps: AgentStep[];
+    proposedActions: AgentProposedAction[];
+    stopReason: 'final' | 'max-steps' | 'no-answer';
+    meta: { model: string; provider: string; steps: number };
+}
+
+/** A persisted run row (GET /v1/agent/run/:id, /v1/agent/runs). */
+export interface AgentRunRecord {
+    id: string;
+    question: string;
+    answer: string | null;
+    steps: AgentStep[];
+    proposedActions: AgentProposedAction[];
+    stopReason: string | null;
+    status: string;
+    stepCount: number;
+    provider: string | null;
+    model: string | null;
+    createdBy: string | null;
+    createdAt: string;
+}
+
+export const agent = {
+    /** The callable tool catalog (handler-backed twin of /v1/mcp/tools). */
+    async tools(): Promise<AgentTool[]> {
+        return request('/v1/agent/tools');
+    },
+    /** Run the bounded ReAct loop synchronously; returns the answer + trace + staged proposals. */
+    async run(question: string, maxSteps?: number): Promise<AgentRunResult> {
+        return request('/v1/agent/run', {
+            method: 'POST',
+            body: maxSteps ? { question, maxSteps } : { question },
+        });
+    },
+    /** Recent persisted runs (agent memory). */
+    async runs(limit = 25): Promise<AgentRunRecord[]> {
+        return request(`/v1/agent/runs?limit=${limit}`);
+    },
+    async getRun(id: string): Promise<AgentRunRecord> {
+        return request(`/v1/agent/run/${encodeURIComponent(id)}`);
+    },
+    /** HITL commit — execute a write the agent proposed. */
+    async commit(tool: string, args: Record<string, unknown>): Promise<{ tool: string; committed: unknown }> {
+        return request('/v1/agent/commit', { method: 'POST', body: { tool, args } });
+    },
+};
