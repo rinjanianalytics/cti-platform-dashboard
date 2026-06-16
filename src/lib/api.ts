@@ -2143,3 +2143,53 @@ export const agent = {
         return request('/v1/agent/commit', { method: 'POST', body: { tool, args } });
     },
 };
+
+// =============================================================================
+// Frameworks — MITRE FiGHT (5G/telco) + ATLAS (AI). The differentiator beside ATT&CK.
+// =============================================================================
+
+export interface FightTechnique {
+    fightId: string;
+    name: string;
+    status: string | null;
+    architectureSegment: string | null;
+    description?: string | null;
+    bluf?: string | null;
+    tacticIds?: string[];
+}
+
+export interface AtlasTechnique {
+    atlasId: string;
+    name: string;
+    maturity: string | null;
+    tacticIds?: string[];
+    attackReferenceId?: string | null;
+    description?: string | null;
+}
+
+export const fight = {
+    async techniques(opts: { q?: string; status?: string; segment?: string; limit?: number } = {}): Promise<FightTechnique[]> {
+        const p = new URLSearchParams();
+        if (opts.q) p.set('q', opts.q);
+        if (opts.status) p.set('status', opts.status);
+        if (opts.segment) p.set('segment', opts.segment);
+        p.set('limit', String(opts.limit ?? 300));
+        return request(`/v1/fight/techniques?${p.toString()}`);
+    },
+    async stats(): Promise<Record<string, unknown>> {
+        return request('/v1/fight/stats');
+    },
+};
+
+export const atlas = {
+    async techniques(opts: { q?: string; maturity?: string; limit?: number } = {}): Promise<AtlasTechnique[]> {
+        const p = new URLSearchParams();
+        if (opts.q) p.set('q', opts.q);
+        if (opts.maturity) p.set('maturity', opts.maturity);
+        p.set('limit', String(opts.limit ?? 300));
+        return request(`/v1/atlas/techniques?${p.toString()}`);
+    },
+    async stats(): Promise<Record<string, unknown>> {
+        return request('/v1/atlas/stats');
+    },
+};
