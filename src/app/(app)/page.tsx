@@ -22,13 +22,13 @@ import useSWR from 'swr';
 import Link from 'next/link';
 import { useState } from 'react';
 import {
-    platform, iocs, watch, actors as actorsApi, pulses as pulsesApi, fight, atlas,
+    platform, iocs, watch, actors as actorsApi, pulses as pulsesApi, fight, atlas, aiIncidents,
     type ThreatActor,
 } from '@/lib/api';
 import { CoverageHeatmap, type CoverageCell } from '@/components/cc/coverage-heatmap';
 import {
     Bolt, ShieldAlert, Crosshair, Grid as GridIcon, Flame, Zap,
-    ArrowUp, ArrowDown, ChevronRight,
+    ArrowUp, ArrowDown, ChevronRight, BrainCircuit,
 } from 'lucide-react';
 import { cn, relTime } from '@/lib/utils';
 import { Sparkline, type SparklineTone } from '@/components/sparkline';
@@ -111,6 +111,7 @@ export default function CommandPage() {
     const { data: coverage }  = useSWR('cc:mitre',     () => platform.mitreCoverage());
     const { data: fightMatrix } = useSWR('cc:fight', () => fight.matrix());
     const { data: atlasMatrix } = useSWR('cc:atlas', () => atlas.matrix());
+    const { data: aiStats } = useSWR('cc:ai-incidents', () => aiIncidents.stats(24));
     const fightCells: CoverageCell[] = (fightMatrix?.tactics ?? []).map((t) => ({
         id: t.mitreId, name: t.name,
         count: (fightMatrix?.techniques ?? []).filter((x) => (x.tacticIds ?? []).includes(t.mitreId)).length,
@@ -263,6 +264,29 @@ export default function CommandPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 <CoverageHeatmap title="FiGHT coverage · 5G" sub={`${fightCells.length} tactics · ${(fightMatrix?.techniques ?? []).length} techniques`} icon={<GridIcon className="size-4" />} cells={fightCells} />
                 <CoverageHeatmap title="ATLAS coverage · AI" sub={`${atlasCells.length} tactics · ${(atlasMatrix?.techniques ?? []).length} techniques`} icon={<GridIcon className="size-4" />} cells={atlasCells} />
+            </div>
+
+            {/* ── Row 3c: AI incidents over time — the live AI-threat signal ── */}
+            <div className="rounded-lg border bg-card p-4">
+                <div className="flex items-start justify-between gap-4 mb-2">
+                    <div>
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                            <BrainCircuit className="size-4" /> AI incidents over time
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            {aiStats?.total ?? '—'} real-world incidents · incidentdatabase.ai
+                        </p>
+                    </div>
+                    <a href="/ai-incidents" className="text-xs text-brand hover:underline shrink-0">View all →</a>
+                </div>
+                <Sparkline data={(aiStats?.timeline ?? []).map((t) => t.count)} tone="brand" />
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                    {(aiStats?.topDevelopers ?? []).slice(0, 6).map((d) => (
+                        <span key={d.name} className="text-[10px] rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
+                            {d.name} · {d.count}
+                        </span>
+                    ))}
+                </div>
             </div>
 
             {/* ── Row 4: Watchlist + Latest pulses ─────────────────────── */}
