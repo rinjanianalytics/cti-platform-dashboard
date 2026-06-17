@@ -77,3 +77,6 @@ jobs:
           # benign defaults so the CI runner doesn't fail when the repo
           # state differs from a normal dev checkout.
           NEXT_PUBLIC_API_URL=http://localhost:3001 pnpm run build
+
+      - name: Bundle-size budget
+        run: node scripts/check-bundle-budget.mjs
