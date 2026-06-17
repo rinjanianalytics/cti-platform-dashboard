@@ -24,7 +24,7 @@
 
 import useSWR from 'swr';
 import { useRouter } from 'next/navigation';
-import { Flame, ShieldAlert, Users, Rss, AlertTriangle, X, type LucideIcon } from 'lucide-react';
+import { Flame, ShieldAlert, Users, Rss, AlertTriangle, X, BrainCircuit, Wallet, RadioTower, type LucideIcon } from 'lucide-react';
 import { events, type EventKind, type PlatformEvent } from '@/lib/api';
 import { relTime, cn } from '@/lib/utils';
 import { useTweaks } from './tweaks';
@@ -48,6 +48,12 @@ const KIND_DISPLAY: Record<EventKind, { icon: LucideIcon; tint: string; iconColo
     pulse:  { icon: Rss,            tint: 'bg-sev-info-soft', iconColor: 'text-sev-info' },
     // Sync — operational urgency. High tint signals "operator should look".
     sync:   { icon: AlertTriangle,  tint: 'bg-sev-high-soft', iconColor: 'text-sev-high' },
+    // AI incident — the AI vertical. Info tint: emerging real-world AI harm.
+    'ai-incident': { icon: BrainCircuit, tint: 'bg-sev-info-soft', iconColor: 'text-sev-info' },
+    // Wallet — a NEW sanctioned address. Crit tint: OFAC SDN is the on-chain "fire".
+    wallet: { icon: Wallet,         tint: 'bg-sev-crit-soft', iconColor: 'text-sev-crit' },
+    // Telco — 5G fraud scheme added. Med tint: notable, not urgent.
+    telco:  { icon: RadioTower,     tint: 'bg-sev-med-soft',  iconColor: 'text-sev-med'  },
 };
 
 export function AttentionRail() {
