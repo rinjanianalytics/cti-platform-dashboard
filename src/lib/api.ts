@@ -922,7 +922,7 @@ export const platform = {
    every 60s by the rail.
    ========================================================================= */
 
-export type EventKind = 'kev' | 'cve' | 'actor' | 'pulse' | 'sync';
+export type EventKind = 'kev' | 'cve' | 'actor' | 'pulse' | 'sync' | 'ai-incident' | 'wallet' | 'telco';
 
 export interface PlatformEvent {
     id: string;
