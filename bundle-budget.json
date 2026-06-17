@@ -1,0 +1,6 @@
+{
+  "_comment": "Gzipped KB budgets enforced by scripts/check-bundle-budget.mjs in CI. ~20% headroom over the 2026-06-17 baseline (shared 168 / total 667 / largest 69). Bump deliberately, with the diff that justifies it — never to silence the gate.",
+  "shared": 200,
+  "total": 800,
+  "largest": 90
+}
