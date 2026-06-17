@@ -34,9 +34,9 @@ function Timeline() {
                 <CardContent>
                     <div className="flex items-end gap-0.5 h-28">
                         {data.timeline.map((t) => (
-                            <div key={t.month} className="flex-1 min-w-0 group relative" title={`${t.month}: ${t.count}`}>
+                            <div key={t.month} className="flex-1 min-w-0 h-full flex items-end group" title={`${t.month}: ${t.count}`}>
                                 <div
-                                    className="bg-brand rounded-sm transition-opacity group-hover:opacity-80"
+                                    className="w-full bg-brand rounded-sm transition-opacity group-hover:opacity-80"
                                     style={{ height: `${Math.max(4, (t.count / max) * 100)}%` }}
                                 />
                             </div>
@@ -87,11 +87,11 @@ export default function AiIncidentsPage() {
                 <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter incidents by title…" className="max-w-md" />
                 {isLoading && <Skeleton className="h-64 w-full" />}
                 {data && (
-                    <Card><CardContent className="p-0"><Table>
+                    <Card><CardContent className="p-0"><Table className="table-fixed">
                         <TableHeader><TableRow>
-                            <TableHead className="w-20">ID</TableHead>
+                            <TableHead className="w-16">ID</TableHead>
                             <TableHead>Title</TableHead>
-                            <TableHead className="w-28">Date</TableHead>
+                            <TableHead className="w-24">Date</TableHead>
                             <TableHead className="w-44">Developers</TableHead>
                             <TableHead className="w-16">Reports</TableHead>
                         </TableRow></TableHeader>
