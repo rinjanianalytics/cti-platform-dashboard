@@ -2227,10 +2227,18 @@ export interface Wallet {
     entityLabel?: string | null; entityType?: string | null;
     confidence: number; attributionSource?: string | null; riskTags?: string[];
 }
-export interface ArkhamAttribution {
+/** Free multi-source on-chain attribution (DB + Blockscout + DefiLlama + optional MistTrack). */
+export interface OnchainAttribution {
     address: string; chain: string;
-    entityName: string | null; entityType: string | null; entityId: string | null;
-    service: string | null; label: string | null; isUserAddress: boolean; isContract: boolean; unattributed: boolean;
+    entityName: string | null; entityType: string | null; label: string | null;
+    isContract: boolean; unattributed: boolean;
+    confidence: number | null;          // only set when our DB already knows it
+    riskScore: number | null;           // MistTrack 3–100, if a key is set
+    riskLevel: string | null;           // MistTrack Low|Moderate|High|Severe
+    tags: string[];
+    sources: { source: string; label?: string | null; type?: string | null; detail?: string | null }[];
+    // legacy fields kept for back-compat
+    entityId: string | null; service: string | null; isUserAddress: boolean;
 }
 
 export const telco = {
@@ -2249,9 +2257,9 @@ export const onchain = {
         const qs = p.toString();
         return request(`/v1/onchain/wallets${qs ? `?${qs}` : ''}`);
     },
-    /** Live Arkham attribution via the agent tool (BYO-key). */
-    lookup: async (address: string, chain = 'ethereum'): Promise<ArkhamAttribution> => {
-        const res = await request<{ tool: string; result: ArkhamAttribution }>('/v1/agent/tool/onchain.lookup', {
+    /** Free multi-source attribution via the agent tool (DB + Blockscout + DefiLlama + optional MistTrack). */
+    lookup: async (address: string, chain = 'ethereum'): Promise<OnchainAttribution> => {
+        const res = await request<{ tool: string; result: OnchainAttribution }>('/v1/agent/tool/onchain.lookup', {
             method: 'POST', body: { address, chain },
         });
         return res.result;
