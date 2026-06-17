@@ -25,9 +25,18 @@ function confTone(c: number): 'default' | 'secondary' | 'outline' {
     return 'outline';
 }
 
+const ENTITY_FILTERS = [
+    { key: '', label: 'All' },
+    { key: 'sanctioned', label: 'Sanctioned' },
+    { key: 'scam', label: 'Scam' },
+    { key: 'exchange', label: 'Exchange' },
+] as const;
+
 export default function OnChainPage() {
     const [q, setQ] = useState('');
-    const { data: wallets, isLoading } = useSWR(['wallets', q], () => onchain.wallets({ q: q || undefined }));
+    const [etype, setEtype] = useState<string>('');
+    const { data: wallets, isLoading } = useSWR(['wallets', q, etype], () =>
+        onchain.wallets({ q: q || undefined, entityType: etype || undefined }));
 
     const [addr, setAddr] = useState('');
     const [looking, setLooking] = useState(false);
@@ -52,7 +61,7 @@ export default function OnChainPage() {
             <div>
                 <h1 className="text-xl font-semibold">On-chain</h1>
                 <p className="text-sm text-muted-foreground">
-                    Crypto-cashout attribution — confidence-weighted, never asserted as fact. Look up an address live on Arkham.
+                    Crypto-cashout attribution — confidence-weighted, never asserted as fact. Sanctioned (OFAC) and scam (ScamSniffer) wallets ingest automatically; look up any address live on Arkham.
                 </p>
             </div>
 
@@ -93,7 +102,21 @@ export default function OnChainPage() {
 
             {/* Wallets */}
             <div className="space-y-2">
-                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter wallets (label)…" className="max-w-md" />
+                <div className="flex flex-wrap items-center gap-2">
+                    <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter wallets (label)…" className="max-w-md" />
+                    <div className="flex gap-1">
+                        {ENTITY_FILTERS.map((f) => (
+                            <Button
+                                key={f.key}
+                                size="sm"
+                                variant={etype === f.key ? 'default' : 'outline'}
+                                onClick={() => setEtype(f.key)}
+                            >
+                                {f.label}
+                            </Button>
+                        ))}
+                    </div>
+                </div>
                 {isLoading && <Skeleton className="h-48 w-full" />}
                 {wallets && (
                     <Card>

@@ -2240,11 +2240,12 @@ export const telco = {
 };
 
 export const onchain = {
-    wallets: (opts: { q?: string; chain?: string; riskTag?: string } = {}): Promise<Wallet[]> => {
+    wallets: (opts: { q?: string; chain?: string; riskTag?: string; entityType?: string } = {}): Promise<Wallet[]> => {
         const p = new URLSearchParams();
         if (opts.q) p.set('q', opts.q);
         if (opts.chain) p.set('chain', opts.chain);
         if (opts.riskTag) p.set('riskTag', opts.riskTag);
+        if (opts.entityType) p.set('entityType', opts.entityType);
         const qs = p.toString();
         return request(`/v1/onchain/wallets${qs ? `?${qs}` : ''}`);
     },
@@ -2255,4 +2256,30 @@ export const onchain = {
         });
         return res.result;
     },
+};
+
+// ── AI incidents (incidentdatabase.ai feed) — the AI-threat-landscape vertical ──
+export interface AiIncident {
+    id: string; incidentId: number; title: string; description: string | null;
+    incidentDate: string | null; deployers: string[]; developers: string[];
+    harmedParties: string[]; reportIds: number[]; reportCount: number;
+    tags: string[]; url: string | null; source: string;
+    createdAt: string; updatedAt: string;
+}
+export interface AiIncidentStats {
+    total: number;
+    timeline: { month: string; count: number }[];
+    topDevelopers: { name: string; count: number }[];
+}
+export const aiIncidents = {
+    list: (opts: { q?: string; since?: string; limit?: number } = {}): Promise<AiIncident[]> => {
+        const p = new URLSearchParams();
+        if (opts.q) p.set('q', opts.q);
+        if (opts.since) p.set('since', opts.since);
+        if (opts.limit) p.set('limit', String(opts.limit));
+        const qs = p.toString();
+        return request(`/v1/ai-incidents${qs ? `?${qs}` : ''}`);
+    },
+    stats: (months?: number): Promise<AiIncidentStats> =>
+        request(`/v1/ai-incidents/stats${months ? `?months=${months}` : ''}`),
 };
