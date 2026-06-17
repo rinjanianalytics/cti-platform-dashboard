@@ -1,16 +1,18 @@
 'use client';
 
 /**
- * On-chain — wallets + live Arkham attribution (AA.6, "follow the money").
+ * On-chain — wallets + free multi-source attribution (AA.6, "follow the money").
  *
  * The crypto-cashout layer of the platform: confidence-weighted wallet
- * attribution + an on-demand Arkham lookup. Attribution is always a CLAIM —
- * shown with its confidence + source, never asserted as fact.
+ * attribution + an on-demand lookup that aggregates FREE sources (our DB:
+ * OFAC/ScamSniffer/DefiLlama · Blockscout · DefiLlama · optional MistTrack).
+ * Attribution is always a CLAIM — shown with its source(s), never asserted as
+ * fact. No paid Arkham dependency.
  */
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { onchain, type ArkhamAttribution } from '@/lib/api';
+import { onchain, type OnchainAttribution } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -40,7 +42,7 @@ export default function OnChainPage() {
 
     const [addr, setAddr] = useState('');
     const [looking, setLooking] = useState(false);
-    const [attr, setAttr] = useState<ArkhamAttribution | null>(null);
+    const [attr, setAttr] = useState<OnchainAttribution | null>(null);
 
     async function lookup() {
         const a = addr.trim();
@@ -50,7 +52,7 @@ export default function OnChainPage() {
         try {
             setAttr(await onchain.lookup(a));
         } catch (e) {
-            toast.error(`Arkham lookup failed: ${(e as Error).message}`);
+            toast.error(`Lookup failed: ${(e as Error).message}`);
         } finally {
             setLooking(false);
         }
@@ -61,13 +63,13 @@ export default function OnChainPage() {
             <div>
                 <h1 className="text-xl font-semibold">On-chain</h1>
                 <p className="text-sm text-muted-foreground">
-                    Crypto-cashout attribution — confidence-weighted, never asserted as fact. Sanctioned (OFAC) and scam (ScamSniffer) wallets ingest automatically; look up any address live on Arkham.
+                    Crypto-cashout attribution — confidence-weighted, never asserted as fact. Sanctioned (OFAC), scam (ScamSniffer) and DeFi-protocol (DefiLlama) wallets ingest automatically; look up any address across free sources.
                 </p>
             </div>
 
-            {/* Arkham lookup */}
+            {/* On-chain lookup (free multi-source) */}
             <Card>
-                <CardHeader className="pb-2"><CardTitle className="text-base">Arkham lookup</CardTitle></CardHeader>
+                <CardHeader className="pb-2"><CardTitle className="text-base">On-chain lookup</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
                     <div className="flex flex-wrap gap-2">
                         <Input
@@ -82,17 +84,34 @@ export default function OnChainPage() {
                     {attr && (
                         <div className="rounded border p-3 text-sm">
                             {attr.unattributed ? (
-                                <span className="text-muted-foreground">No Arkham attribution for this address.</span>
+                                <span className="text-muted-foreground">No attribution found across free sources for this address.</span>
                             ) : (
-                                <div className="space-y-1">
-                                    <div className="font-medium">{attr.entityName || attr.label}</div>
-                                    <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="font-medium">{attr.entityName || attr.label}</span>
                                         {attr.entityType && <Badge variant="outline">{attr.entityType}</Badge>}
-                                        {attr.service && <span>service: {attr.service}</span>}
-                                        {attr.label && <span>label: {attr.label}</span>}
                                         {attr.isContract && <Badge variant="secondary">contract</Badge>}
+                                        {attr.confidence != null && <Badge variant={confTone(attr.confidence)}>{attr.confidence}%</Badge>}
+                                        {attr.riskLevel && (
+                                            <Badge variant={attr.riskScore != null && attr.riskScore >= 60 ? 'destructive' : 'secondary'}>
+                                                risk: {attr.riskLevel}{attr.riskScore != null ? ` (${attr.riskScore})` : ''}
+                                            </Badge>
+                                        )}
                                     </div>
-                                    <p className="text-xs text-muted-foreground">Attribution from Arkham — assign a confidence before recording it as a wallet (the agent proposes; an analyst commits).</p>
+                                    {attr.tags.length > 0 && (
+                                        <div className="flex flex-wrap gap-1">
+                                            {attr.tags.slice(0, 12).map((t) => <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>)}
+                                        </div>
+                                    )}
+                                    <div className="flex flex-wrap gap-1.5 text-xs text-muted-foreground">
+                                        <span>sources:</span>
+                                        {attr.sources.map((s, i) => (
+                                            <span key={`${s.source}:${i}`} className="rounded bg-muted px-1.5 py-0.5">
+                                                {s.source}{s.label ? ` · ${s.label}` : ''}
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">Aggregated from free sources — each label rides with its provenance. Assign a confidence before recording it as a wallet (the agent proposes; an analyst commits).</p>
                                 </div>
                             )}
                         </div>
