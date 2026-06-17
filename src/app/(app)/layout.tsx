@@ -15,7 +15,7 @@ import {
     ServerCog, BookOpen, Workflow, Boxes, CalendarClock,
     UsersRound, ScrollText, ChevronLeft, ChevronRight,
     Globe2, AlertTriangle, FileCode2, AtSign, KeyRound, Activity, Spade, EyeOff,
-    Cable, Sparkles, Layers3, RadioTower, Wallet,
+    Cable, Sparkles, Layers3, RadioTower, Wallet, BrainCircuit,
 } from 'lucide-react';
 import { SearchPalette } from '@/components/search-palette';
 import { MobileBottomNav } from '@/components/mobile-bottom-nav';
@@ -68,9 +68,10 @@ const NAV_GROUPS: Array<{ heading: string; items: NavItem[] }> = [
             { href: '/vulnerabilities', label: 'Vulnerabilities', icon: Shield   },
             { href: '/actors',          label: 'Threat actors',   icon: Users    },
             { href: '/ttp-changes',     label: 'TTP changelog',   icon: Activity },
-            { href: '/frameworks',      label: 'Frameworks',      icon: Layers3    },
-            { href: '/telco',           label: 'Telco',           icon: RadioTower },
-            { href: '/onchain',         label: 'On-chain',        icon: Wallet     },
+            { href: '/frameworks',      label: 'Frameworks',      icon: Layers3      },
+            { href: '/ai-incidents',    label: 'AI incidents',    icon: BrainCircuit },
+            { href: '/telco',           label: 'Telco',           icon: RadioTower   },
+            { href: '/onchain',         label: 'On-chain',        icon: Wallet       },
             { href: '/graph',           label: 'Graph',           icon: Network    },
         ],
     },
