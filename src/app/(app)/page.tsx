@@ -22,16 +22,17 @@ import useSWR from 'swr';
 import Link from 'next/link';
 import { useState } from 'react';
 import {
-    platform, iocs, watch, actors as actorsApi, pulses as pulsesApi, fight, atlas, aiIncidents,
-    type ThreatActor,
+    platform, iocs, watch, actors as actorsApi, pulses as pulsesApi, fight, atlas, aiIncidents, telco,
+    type ThreatActor, type AiIncidentStats,
 } from '@/lib/api';
 import { CoverageHeatmap, type CoverageCell } from '@/components/cc/coverage-heatmap';
 import {
     Bolt, ShieldAlert, Crosshair, Grid as GridIcon, Flame, Zap,
-    ArrowUp, ArrowDown, ChevronRight, BrainCircuit,
+    ArrowUp, ArrowDown, ChevronRight, BrainCircuit, RadioTower, Wallet,
 } from 'lucide-react';
 import { cn, relTime } from '@/lib/utils';
 import { Sparkline, type SparklineTone } from '@/components/sparkline';
+import { MiniBars } from '@/components/cc/mini-bars';
 import { Sev, normalizeSeverity, SEV_RANK, type Severity } from '@/components/cc/sev';
 import { StatusDot } from '@/components/cc/status-dot';
 import { PanelHead } from '@/components/cc/panel-head';
@@ -112,6 +113,15 @@ export default function CommandPage() {
     const { data: fightMatrix } = useSWR('cc:fight', () => fight.matrix());
     const { data: atlasMatrix } = useSWR('cc:atlas', () => atlas.matrix());
     const { data: aiStats } = useSWR('cc:ai-incidents', () => aiIncidents.stats(24));
+    // Strategic verticals (AI · Telco · On-chain) — the differentiator.
+    const { data: telcoFraud } = useSWR('cc:telco-fraud', () => telco.fraudSchemes());
+    const { data: telcoSignaling } = useSWR('cc:telco-signaling', () => telco.signalingInterfaces());
+    // Accurate wallet totals via the IOC sink's pagination.total (the wallets
+    // list endpoint caps at 500, which would under-report scam at 2.5k).
+    const { data: ofacIocs } = useSWR('cc:ofac-total', () => iocs.list({ source: 'ofac', pageSize: 1 }));
+    const { data: scamIocs } = useSWR('cc:scam-total', () => iocs.list({ source: 'scamsniffer', pageSize: 1 }));
+    const sanctionedCount = ofacIocs?.pagination?.total ?? null;
+    const scamCount = scamIocs?.pagination?.total ?? null;
     const fightCells: CoverageCell[] = (fightMatrix?.tactics ?? []).map((t) => ({
         id: t.mitreId, name: t.name,
         count: (fightMatrix?.techniques ?? []).filter((x) => (x.tacticIds ?? []).includes(t.mitreId)).length,
@@ -242,6 +252,18 @@ export default function CommandPage() {
                 />
             </div>
 
+            {/* ── Strategic verticals — AI · Telco · On-chain (the differentiator).
+                Promoted directly under the baseline KPIs so the unique coverage
+                reads first, not buried below the framework heatmaps. ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                <AiVerticalPanel stats={aiStats ?? null} />
+                <TelcoVerticalPanel
+                    fraudSchemes={telcoFraud?.length ?? null}
+                    signaling={telcoSignaling?.length ?? null}
+                />
+                <OnchainVerticalPanel sanctioned={sanctionedCount} scam={scamCount} />
+            </div>
+
             {/* ── Row 2: Triage + Severity ─────────────────────────────── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
                 <div className="lg:col-span-2">
@@ -260,33 +282,10 @@ export default function CommandPage() {
                 <TrendingTagsPanel tags={trending ?? []} />
             </div>
 
-            {/* ── Row 3b: FiGHT (5G) + ATLAS (AI) coverage — the differentiator ── */}
+            {/* ── Row 3b: FiGHT (5G) + ATLAS (AI) framework coverage ──────── */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 <CoverageHeatmap title="FiGHT coverage · 5G" sub={`${fightCells.length} tactics · ${(fightMatrix?.techniques ?? []).length} techniques`} icon={<GridIcon className="size-4" />} cells={fightCells} />
                 <CoverageHeatmap title="ATLAS coverage · AI" sub={`${atlasCells.length} tactics · ${(atlasMatrix?.techniques ?? []).length} techniques`} icon={<GridIcon className="size-4" />} cells={atlasCells} />
-            </div>
-
-            {/* ── Row 3c: AI incidents over time — the live AI-threat signal ── */}
-            <div className="rounded-lg border bg-card p-4">
-                <div className="flex items-start justify-between gap-4 mb-2">
-                    <div>
-                        <div className="flex items-center gap-2 text-sm font-medium">
-                            <BrainCircuit className="size-4" /> AI incidents over time
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                            {aiStats?.total ?? '—'} real-world incidents · incidentdatabase.ai
-                        </p>
-                    </div>
-                    <a href="/ai-incidents" className="text-xs text-brand hover:underline shrink-0">View all →</a>
-                </div>
-                <Sparkline data={(aiStats?.timeline ?? []).map((t) => t.count)} tone="brand" />
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                    {(aiStats?.topDevelopers ?? []).slice(0, 6).map((d) => (
-                        <span key={d.name} className="text-[10px] rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
-                            {d.name} · {d.count}
-                        </span>
-                    ))}
-                </div>
             </div>
 
             {/* ── Row 4: Watchlist + Latest pulses ─────────────────────── */}
@@ -385,6 +384,104 @@ function deltaPct(series: number[] | undefined): { sign: 'up' | 'down' | 'flat';
 function trimPartialDay(series: number[] | undefined): number[] | undefined {
     if (!series || series.length < 2) return series;
     return series.slice(0, -1);
+}
+
+/* ============================================================================
+   Strategic verticals — AI · Telco · On-chain. The platform differentiator,
+   rendered as design-system panels directly under the baseline KPIs.
+   ========================================================================= */
+
+function VerticalShell({
+    icon, title, sub, href, children,
+}: {
+    icon: React.ReactNode;
+    title: string;
+    sub?: string;
+    href: string;
+    children: React.ReactNode;
+}) {
+    return (
+        <div className="panel panel-pad">
+            <PanelHead
+                icon={icon}
+                title={title}
+                sub={sub}
+                right={
+                    <Link href={href} className="text-[12px] text-text-3 hover:text-text inline-flex items-center gap-0.5">
+                        View <ChevronRight className="size-3" />
+                    </Link>
+                }
+            />
+            <div className="mt-3">{children}</div>
+        </div>
+    );
+}
+
+function VerticalStat({ value, label, tone }: { value: number | null; label: string; tone?: string }) {
+    return (
+        <div className="min-w-0">
+            <div
+                className="font-mono text-[24px] leading-none font-semibold tnum tracking-[-0.02em] truncate"
+                style={tone ? { color: `var(--${tone})` } : undefined}
+            >
+                {fmt(value)}
+            </div>
+            <div className="eyebrow mt-1.5">{label}</div>
+        </div>
+    );
+}
+
+function AiVerticalPanel({ stats }: { stats: AiIncidentStats | null }) {
+    const timeline = (stats?.timeline ?? []).map(t => t.count);
+    return (
+        <VerticalShell
+            icon={<BrainCircuit className="size-4" />}
+            title="AI incidents"
+            sub={stats ? `${fmt(stats.total)} real-world · live` : 'incidentdatabase.ai'}
+            href="/ai-incidents"
+        >
+            <MiniBars data={timeline} />
+            <div className="flex flex-wrap gap-1 mt-2.5">
+                {(stats?.topDevelopers ?? []).slice(0, 3).map(d => (
+                    <span key={d.name} className="chip max-w-full truncate" title={`${d.name} · ${d.count}`}>
+                        {d.name} · {d.count}
+                    </span>
+                ))}
+            </div>
+        </VerticalShell>
+    );
+}
+
+function TelcoVerticalPanel({ fraudSchemes, signaling }: { fraudSchemes: number | null; signaling: number | null }) {
+    return (
+        <VerticalShell
+            icon={<RadioTower className="size-4" />}
+            title="Telco · 5G"
+            sub="signaling-fraud coverage"
+            href="/telco"
+        >
+            <div className="grid grid-cols-2 gap-3">
+                <VerticalStat value={fraudSchemes} label="Fraud schemes" />
+                <VerticalStat value={signaling} label="Signaling ifaces" />
+            </div>
+        </VerticalShell>
+    );
+}
+
+function OnchainVerticalPanel({ sanctioned, scam }: { sanctioned: number | null; scam: number | null }) {
+    return (
+        <VerticalShell
+            icon={<Wallet className="size-4" />}
+            title="On-chain"
+            sub="attributed scam + sanctioned wallets"
+            href="/onchain"
+        >
+            <div className="grid grid-cols-2 gap-3">
+                <VerticalStat value={sanctioned} label="Sanctioned · OFAC" tone="sev-high" />
+                <VerticalStat value={scam} label="Scam · ScamSniffer" tone="sev-med" />
+            </div>
+        </VerticalShell>
+    );
 }
 
 /* ============================================================================
