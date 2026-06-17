@@ -20,9 +20,9 @@ import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { pulses, platform, type Pulse } from '@/lib/api';
+import { pulses, platform, aiIncidents, iocs, telco, type Pulse } from '@/lib/api';
 import { Input } from '@/components/ui/input';
-import { Globe, Search, X, Flame } from 'lucide-react';
+import { Globe, Search, X, Flame, BrainCircuit, RadioTower, Wallet, Layers3 } from 'lucide-react';
 import { cn, relTime } from '@/lib/utils';
 import { PanelHead } from '@/components/cc/panel-head';
 import { Segmented } from '@/components/cc/segmented';
@@ -83,6 +83,14 @@ export default function FeedsPage() {
         () => platform.feedMonitoring(),
     );
 
+    // Strategic verticals — AI · Telco · On-chain. Surfaced above the baseline
+    // pulse stream so Feeds leads with our differentiated coverage. Wallet
+    // totals come from the IOC sink's pagination.total (accurate past 500).
+    const { data: aiStats }   = useSWR('feeds:ai',    () => aiIncidents.stats());
+    const { data: ofacIocs }  = useSWR('feeds:ofac',  () => iocs.list({ source: 'ofac', pageSize: 1 }));
+    const { data: scamIocs }  = useSWR('feeds:scam',  () => iocs.list({ source: 'scamsniffer', pageSize: 1 }));
+    const { data: telcoFraud } = useSWR('feeds:telco', () => telco.fraudSchemes());
+
     // Memo'd so the downstream `filteredItems` useMemo dep doesn't churn
     // every render — same pattern as the search palette / page.tsx.
     const items = useMemo(() => data?.items ?? [], [data?.items]);
@@ -114,6 +122,42 @@ export default function FeedsPage() {
                         {isLoading ? 'Loading…' : `${total.toLocaleString()} ingested intelligence pulses`}
                         {feedList.length > 0 && ` · ${healthyFeeds}/${feedList.length} sources active`}
                     </p>
+                </div>
+            </div>
+
+            {/* Strategic verticals — AI · Telco · On-chain (the differentiator) */}
+            <div className="panel panel-pad">
+                <PanelHead
+                    icon={<Layers3 className="size-4" />}
+                    title="Strategic verticals"
+                    sub="AI · Telco · On-chain — our differentiated coverage"
+                />
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <VerticalFeedCard
+                        href="/ai-incidents"
+                        icon={<BrainCircuit className="size-3.5" />}
+                        label="AI incidents"
+                        value={aiStats?.total ?? null}
+                        meta="incidentdatabase.ai · daily"
+                    />
+                    <VerticalFeedCard
+                        href="/onchain"
+                        icon={<Wallet className="size-3.5" />}
+                        label="On-chain wallets"
+                        value={
+                            ofacIocs && scamIocs
+                                ? (ofacIocs.pagination?.total ?? 0) + (scamIocs.pagination?.total ?? 0)
+                                : null
+                        }
+                        meta="OFAC sanctioned + ScamSniffer scam"
+                    />
+                    <VerticalFeedCard
+                        href="/telco"
+                        icon={<RadioTower className="size-3.5" />}
+                        label="Telco · 5G fraud schemes"
+                        value={telcoFraud?.length ?? null}
+                        meta="GSMA signaling-fraud taxonomy"
+                    />
                 </div>
             </div>
 
@@ -226,6 +270,32 @@ export default function FeedsPage() {
                 </div>
             )}
         </div>
+    );
+}
+
+function VerticalFeedCard({
+    href, icon, label, value, meta,
+}: {
+    href: string;
+    icon: React.ReactNode;
+    label: string;
+    value: number | null;
+    meta: string;
+}) {
+    return (
+        <Link
+            href={href}
+            className="block rounded-md border border-line-soft bg-bg-2 hover:border-brand-line px-3 py-2.5 min-w-0 transition-colors"
+        >
+            <div className="flex items-center gap-1.5 text-[11px] text-text-3 min-w-0">
+                {icon}
+                <span className="truncate">{label}</span>
+            </div>
+            <div className="text-[20px] font-mono tnum mt-1 leading-none">
+                {value == null ? '—' : value.toLocaleString()}
+            </div>
+            <div className="text-[10.5px] text-text-4 mt-1 truncate">{meta}</div>
+        </Link>
     );
 }
 
