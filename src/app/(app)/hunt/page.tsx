@@ -4,7 +4,7 @@
  * Hunt — agentic-analytics console (W2).
  *
  * Ask a question in English → the agent runs a bounded ReAct loop over the
- * read-only tool plane (graph hunt, RAG, on-chain/Arkham) → we render the
+ * read-only tool plane (graph hunt, RAG, free multi-source on-chain lookup) → we render the
  * tool-by-tool reasoning trace, the synthesized answer, and any STAGED writes
  * the agent proposed. Proposals apply only on the analyst's click — the HITL
  * gate. Recent hunts come from agent memory.
