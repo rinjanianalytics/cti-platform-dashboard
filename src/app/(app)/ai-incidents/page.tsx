@@ -26,7 +26,7 @@ function Timeline() {
     const max = Math.max(1, ...data.timeline.map((t) => t.count));
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-            <Card className="lg:col-span-2">
+            <Card className="lg:col-span-2 min-w-0">
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base">Incidents over time</CardTitle>
                     <p className="text-xs text-muted-foreground">{data.total} total · monthly, last 24 months</p>
@@ -48,12 +48,12 @@ function Timeline() {
                     </div>
                 </CardContent>
             </Card>
-            <Card>
+            <Card className="min-w-0">
                 <CardHeader className="pb-2"><CardTitle className="text-base">Top alleged developers</CardTitle></CardHeader>
                 <CardContent className="space-y-1.5">
                     {data.topDevelopers.slice(0, 8).map((d) => (
-                        <div key={d.name} className="flex items-center justify-between gap-2 text-sm">
-                            <span className="truncate wrap-break-word">{d.name}</span>
+                        <div key={d.name} className="flex items-center justify-between gap-2 text-sm min-w-0">
+                            <span className="min-w-0 truncate" title={d.name}>{d.name}</span>
                             <Badge variant="secondary" className="shrink-0">{d.count}</Badge>
                         </div>
                     ))}
