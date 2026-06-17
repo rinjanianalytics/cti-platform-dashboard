@@ -20,8 +20,9 @@ import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { pulses, platform, aiIncidents, iocs, telco, type Pulse } from '@/lib/api';
+import { pulses, platform, aiIncidents, iocs, telco, onchain, type Pulse } from '@/lib/api';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Globe, Search, X, Flame, BrainCircuit, RadioTower, Wallet, Layers3 } from 'lucide-react';
 import { cn, relTime } from '@/lib/utils';
 import { PanelHead } from '@/components/cc/panel-head';
@@ -206,6 +207,9 @@ export default function FeedsPage() {
                 )}
             </div>
 
+            {/* Latest by vertical — AI incidents · On-chain wallets · Fraud schemes */}
+            <VerticalLatestTabs />
+
             {/* Search toolbar */}
             <div className="flex items-center gap-2 flex-wrap">
                 <div className="relative flex-1 min-w-60 max-w-md">
@@ -269,6 +273,75 @@ export default function FeedsPage() {
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+function VerticalLatestTabs() {
+    const { data: ai } = useSWR('feeds:tab-ai', () => aiIncidents.list({ limit: 8 }));
+    const { data: wallets } = useSWR('feeds:tab-wallets', () => onchain.wallets({}));
+    const { data: fraud } = useSWR('feeds:tab-fraud', () => telco.fraudSchemes());
+    return (
+        <div className="panel panel-pad">
+            <PanelHead icon={<Layers3 className="size-4" />} title="Latest by vertical" sub="AI incidents · on-chain wallets · telco fraud schemes" />
+            <Tabs defaultValue="ai" className="mt-3">
+                <TabsList>
+                    <TabsTrigger value="ai">AI incidents</TabsTrigger>
+                    <TabsTrigger value="onchain">On-chain wallets</TabsTrigger>
+                    <TabsTrigger value="fraud">Fraud schemes</TabsTrigger>
+                </TabsList>
+                <TabsContent value="ai" className="mt-3">
+                    <ul>
+                        {(ai ?? []).slice(0, 8).map((r, i) => (
+                            <li key={r.id} className={cn(i > 0 && 'border-t border-line-soft')}>
+                                <a href={r.url ?? '#'} target="_blank" rel="noreferrer" className="grid grid-cols-[1fr_auto] items-center gap-3 py-2 hover:text-text transition-colors">
+                                    <div className="min-w-0">
+                                        <div className="text-[12.5px] truncate"><span className="font-mono text-[11px] text-text-4 mr-1.5">#{r.incidentId}</span>{r.title}</div>
+                                        <div className="text-[11px] text-text-3 truncate">{r.developers.slice(0, 2).join(' · ') || '—'}</div>
+                                    </div>
+                                    <span className="text-[11px] text-text-4 font-mono tnum shrink-0">{r.incidentDate || ''}</span>
+                                </a>
+                            </li>
+                        ))}
+                        {(ai ?? []).length === 0 && <li className="text-[12.5px] text-text-3 py-2">No incidents.</li>}
+                    </ul>
+                </TabsContent>
+                <TabsContent value="onchain" className="mt-3">
+                    <ul>
+                        {(wallets ?? []).slice(0, 8).map((w, i) => (
+                            <li key={w.refId} className={cn(i > 0 && 'border-t border-line-soft')}>
+                                <div className="grid grid-cols-[1fr_auto] items-center gap-3 py-2">
+                                    <div className="min-w-0">
+                                        <div className="font-mono text-[11.5px] truncate">{w.chain}:{w.address}</div>
+                                        <div className="text-[11px] text-text-3 truncate">{w.entityLabel || '—'}</div>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                        {w.entityType && <span className="chip">{w.entityType}</span>}
+                                        <span className="font-mono text-[11px] tnum text-text-3 w-9 text-right">{w.confidence}%</span>
+                                    </div>
+                                </div>
+                            </li>
+                        ))}
+                        {(wallets ?? []).length === 0 && <li className="text-[12.5px] text-text-3 py-2">No wallets.</li>}
+                    </ul>
+                </TabsContent>
+                <TabsContent value="fraud" className="mt-3">
+                    <ul>
+                        {(fraud ?? []).slice(0, 8).map((f, i) => (
+                            <li key={f.refId} className={cn(i > 0 && 'border-t border-line-soft')}>
+                                <div className="grid grid-cols-[1fr_auto] items-center gap-3 py-2">
+                                    <div className="min-w-0">
+                                        <div className="text-[12.5px] truncate">{f.name}</div>
+                                        <div className="text-[11px] text-text-3 truncate font-mono">{f.refId}</div>
+                                    </div>
+                                    {f.schemeType && <span className="chip shrink-0">{f.schemeType}</span>}
+                                </div>
+                            </li>
+                        ))}
+                        {(fraud ?? []).length === 0 && <li className="text-[12.5px] text-text-3 py-2">No fraud schemes.</li>}
+                    </ul>
+                </TabsContent>
+            </Tabs>
         </div>
     );
 }

@@ -23,12 +23,14 @@ import Link from 'next/link';
 import { useState } from 'react';
 import {
     platform, iocs, watch, actors as actorsApi, pulses as pulsesApi, fight, atlas, aiIncidents, telco,
+    onchain, ttps, breaches,
     type ThreatActor, type AiIncidentStats,
 } from '@/lib/api';
 import { CoverageHeatmap, type CoverageCell } from '@/components/cc/coverage-heatmap';
 import {
     Bolt, ShieldAlert, Crosshair, Grid as GridIcon, Flame, Zap,
     ArrowUp, ArrowDown, ChevronRight, BrainCircuit, RadioTower, Wallet,
+    Activity, KeyRound,
 } from 'lucide-react';
 import { cn, relTime } from '@/lib/utils';
 import { Sparkline, type SparklineTone } from '@/components/sparkline';
@@ -264,31 +266,37 @@ export default function CommandPage() {
                 <OnchainVerticalPanel sanctioned={sanctionedCount} scam={scamCount} />
             </div>
 
-            {/* ── Row 2: Triage + Severity ─────────────────────────────── */}
+            {/* ── Framework coverage — FiGHT (5G) · ATLAS (AI) · ATT&CK ──── */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                <div className="lg:col-span-2">
-                    <TriagePanel triage={triage?.items ?? []} />
-                </div>
-                <SeverityPanel landscape={landscape ?? null} />
+                <CoverageHeatmap title="FiGHT coverage · 5G" sub={`${fightCells.length} tactics · ${(fightMatrix?.techniques ?? []).length} techniques`} icon={<GridIcon className="size-4" />} cells={fightCells} />
+                <CoverageHeatmap title="ATLAS coverage · AI" sub={`${atlasCells.length} tactics · ${(atlasMatrix?.techniques ?? []).length} techniques`} icon={<GridIcon className="size-4" />} cells={atlasCells} />
+                <AttackHeatmap tactics={coverage?.tactics ?? []} lastSyncedAt={coverage?.lastSyncedAt} />
             </div>
 
-            {/* ── Row 3: Types · ATT&CK · Trending ─────────────────────── */}
-            <div className="grid grid-cols-1 lg:grid-cols-[1.05fr_1.15fr_1fr] gap-3">
+            {/* ── Latest vertical activity — AI incidents · On-chain ─────── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <LatestAiIncidentsPanel />
+                <LatestOnchainPanel />
+            </div>
+
+            {/* ── Triage · Severity · TTP changelog ────────────────────── */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                <TriagePanel triage={triage?.items ?? []} />
+                <SeverityPanel landscape={landscape ?? null} />
+                <LatestTtpPanel />
+            </div>
+
+            {/* ── Indicator types · Trending tags · Data breaches ──────── */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
                 <IndicatorTypesPanel
                     types={landscape?.iocTypeDistribution ?? []}
                     total={landscape?.iocs.total ?? 0}
                 />
-                <AttackHeatmap tactics={coverage?.tactics ?? []} lastSyncedAt={coverage?.lastSyncedAt} />
                 <TrendingTagsPanel tags={trending ?? []} />
+                <LatestBreachesPanel />
             </div>
 
-            {/* ── Row 3b: FiGHT (5G) + ATLAS (AI) framework coverage ──────── */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                <CoverageHeatmap title="FiGHT coverage · 5G" sub={`${fightCells.length} tactics · ${(fightMatrix?.techniques ?? []).length} techniques`} icon={<GridIcon className="size-4" />} cells={fightCells} />
-                <CoverageHeatmap title="ATLAS coverage · AI" sub={`${atlasCells.length} tactics · ${(atlasMatrix?.techniques ?? []).length} techniques`} icon={<GridIcon className="size-4" />} cells={atlasCells} />
-            </div>
-
-            {/* ── Row 4: Watchlist + Latest pulses ─────────────────────── */}
+            {/* ── Actor watchlist · Latest intel pulses ────────────────── */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 <ActorWatchlistPanel activeActors={actors?.actors ?? []} />
                 <LatestPulsesPanel pulses={pulses?.items ?? []} />
@@ -1011,5 +1019,120 @@ function LatestPulsesPanel({ pulses }: { pulses: PulseRow[] }) {
                 ))}
             </ul>
         </div>
+    );
+}
+
+/* ============================================================================
+   Latest-activity panels — compact row lists for the verticals + adjacent
+   surfaces. Self-fetching (mirrors ActorWatchlistPanel) to keep the render
+   tree flat. Each links to its full page.
+   ========================================================================= */
+
+function LatestPanelShell({
+    icon, title, sub, href, hrefLabel = 'All', children,
+}: {
+    icon: React.ReactNode; title: string; sub?: string; href: string; hrefLabel?: string; children: React.ReactNode;
+}) {
+    return (
+        <div className="panel panel-pad">
+            <PanelHead
+                icon={icon}
+                title={title}
+                sub={sub}
+                right={
+                    <Link href={href} className="text-[12px] text-text-3 hover:text-text inline-flex items-center gap-0.5">
+                        {hrefLabel} <ChevronRight className="size-3" />
+                    </Link>
+                }
+            />
+            <ul className="mt-3">{children}</ul>
+        </div>
+    );
+}
+
+function LatestAiIncidentsPanel() {
+    const { data } = useSWR('cc:latest-ai', () => aiIncidents.list({ limit: 6 }));
+    const items = data ?? [];
+    return (
+        <LatestPanelShell icon={<BrainCircuit className="size-4" />} title="Latest AI incidents" sub={`${items.length} most recent`} href="/ai-incidents">
+            {items.length === 0 ? <li className="text-[12.5px] text-text-3">No incidents.</li> : items.map((r, i) => (
+                <li key={r.id} className={cn(i > 0 && 'border-t border-line-soft')}>
+                    <a href={r.url ?? '#'} target="_blank" rel="noreferrer" className="grid grid-cols-[1fr_auto] items-center gap-3 py-2 hover:text-text transition-colors">
+                        <div className="min-w-0">
+                            <div className="text-[12.5px] truncate"><span className="font-mono text-[11px] text-text-4 mr-1.5">#{r.incidentId}</span>{r.title}</div>
+                            <div className="text-[11px] text-text-3 truncate">{r.developers.slice(0, 2).join(' · ') || '—'}</div>
+                        </div>
+                        <span className="text-[11px] text-text-4 font-mono tnum shrink-0">{r.incidentDate || ''}</span>
+                    </a>
+                </li>
+            ))}
+        </LatestPanelShell>
+    );
+}
+
+function LatestOnchainPanel() {
+    const { data } = useSWR('cc:latest-wallets', () => onchain.wallets({}));
+    const items = (data ?? []).slice(0, 6);
+    return (
+        <LatestPanelShell icon={<Wallet className="size-4" />} title="Latest on-chain wallets" sub={`${items.length} recent`} href="/onchain">
+            {items.length === 0 ? <li className="text-[12.5px] text-text-3">No wallets.</li> : items.map((w, i) => (
+                <li key={w.refId} className={cn(i > 0 && 'border-t border-line-soft')}>
+                    <div className="grid grid-cols-[1fr_auto] items-center gap-3 py-2">
+                        <div className="min-w-0">
+                            <div className="font-mono text-[11.5px] truncate">{w.chain}:{w.address}</div>
+                            <div className="text-[11px] text-text-3 truncate">{w.entityLabel || '—'}</div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                            {w.entityType && <span className="chip">{w.entityType}</span>}
+                            <span className="font-mono text-[11px] tnum text-text-3 w-9 text-right">{w.confidence}%</span>
+                        </div>
+                    </div>
+                </li>
+            ))}
+        </LatestPanelShell>
+    );
+}
+
+function LatestTtpPanel() {
+    const { data } = useSWR('cc:latest-ttp', () => ttps.list({ pageSize: 6 }));
+    const items = data?.items ?? [];
+    return (
+        <LatestPanelShell icon={<Activity className="size-4" />} title="Latest TTP changelog" sub={`${items.length} recent`} href="/ttp-changes">
+            {items.length === 0 ? <li className="text-[12.5px] text-text-3">No changes.</li> : items.map((t, i) => (
+                <li key={t.id} className={cn(i > 0 && 'border-t border-line-soft')}>
+                    <Link href="/ttp-changes" className="grid grid-cols-[auto_1fr_auto] items-center gap-2 py-2 hover:text-text transition-colors">
+                        <span className={cn('font-mono text-[12px] w-3 text-center', t.changeType === 'added' ? 'text-ok' : 'text-sev-high')}>{t.changeType === 'added' ? '+' : '−'}</span>
+                        <div className="min-w-0">
+                            <div className="text-[12.5px] truncate">{t.actorName || t.actorId}</div>
+                            <div className="text-[11px] text-text-3 truncate">{[t.techniqueMitreId || t.techniqueId, t.techniqueName].filter(Boolean).join(' · ')}</div>
+                        </div>
+                        <span className="text-[11px] text-text-4 font-mono tnum shrink-0">{relTime(t.detectedAt)}</span>
+                    </Link>
+                </li>
+            ))}
+        </LatestPanelShell>
+    );
+}
+
+function LatestBreachesPanel() {
+    const { data } = useSWR('cc:latest-breaches', () => breaches.list({ pageSize: 6 }));
+    const items = [...(data?.items ?? [])]
+        .sort((a, b) => (b.addedDate ?? '').localeCompare(a.addedDate ?? ''))
+        .slice(0, 6);
+    const fmtN = (n: number) => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n);
+    return (
+        <LatestPanelShell icon={<KeyRound className="size-4" />} title="Latest data breaches" sub={`${items.length} recent`} href="/data-breaches">
+            {items.length === 0 ? <li className="text-[12.5px] text-text-3">No breaches.</li> : items.map((b, i) => (
+                <li key={b.id} className={cn(i > 0 && 'border-t border-line-soft')}>
+                    <Link href="/data-breaches" className="grid grid-cols-[1fr_auto] items-center gap-3 py-2 hover:text-text transition-colors">
+                        <div className="min-w-0">
+                            <div className="text-[12.5px] truncate">{b.title || b.name}</div>
+                            <div className="text-[11px] text-text-3 truncate">{b.domain || '—'}</div>
+                        </div>
+                        <span className="text-[11px] text-text-4 font-mono tnum shrink-0" title={`${b.pwnCount.toLocaleString()} accounts`}>{fmtN(b.pwnCount)}</span>
+                    </Link>
+                </li>
+            ))}
+        </LatestPanelShell>
     );
 }
